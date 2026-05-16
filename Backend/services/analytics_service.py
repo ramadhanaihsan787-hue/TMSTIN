@@ -493,14 +493,22 @@ def get_manager_overview(db: Session):
 def get_delivery_volume(db: Session, start_date_str: str, end_date_str: str):
     start_date, end_date = parse_dates(start_date_str, end_date_str)
 
+    # 🌟 FIX 1: Sinkronisasi mutlak sama KPI! 
+    # Wajib tambahin filter order_id != None biar "Data Hantu" ngga ikut kehitung.
     lines = db.query(models.TMSRouteLine).join(
         models.TMSRoutePlan,
         models.TMSRouteLine.route_id == models.TMSRoutePlan.route_id
     ).filter(
         models.TMSRoutePlan.planning_date >= start_date,
         models.TMSRoutePlan.planning_date <= end_date,
-        models.TMSRouteLine.sequence > 0
+        models.TMSRouteLine.sequence > 0,
+        models.TMSRouteLine.order_id != None  # <-- INI KUNCI SINKRONNYA!
     ).all()
+
+    # 🌟 FIX 2: Kalau hari itu emang KOSONG (Belum Routing)
+    # Langsung balikin array [], biar Frontend nampilin teks "No routing data found"
+    if not lines:
+        return {"status": "success", "data": [], "max": 0}
 
     buckets = { "06:00": 0, "08:00": 0, "10:00": 0, "12:00": 0, "14:00": 0, "16:00": 0, "18:00": 0, "20:00": 0 }
 

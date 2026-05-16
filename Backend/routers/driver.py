@@ -1,18 +1,18 @@
 # routers/driver.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from sqlalchemy import or_ # 🌟 SUNTIKAN BARU: Buat pencarian multi-kondisi
+from sqlalchemy import or_
 from datetime import date, datetime
 import os
 import shutil
 import uuid
 import io
 
-# 🌟 SUNTIKAN CTO POINT 6: IMPORT MAGIC PILLOW
 from PIL import Image, ImageDraw, ImageFont
+from services.epod_service import submit_epod_with_ai
 
 import models
-import schemas # 🌟 SUNTIKAN PERTAMA: Import Kamus Pydantic Kita!
+import schemas 
 from dependencies import get_db, get_current_user
 
 router = APIRouter(prefix="/api/driver", tags=["Driver App"])
@@ -181,8 +181,11 @@ def update_stop_status(
     db.commit()
     return {"status": "success", "message": f"Status rute {line_id} berhasil diupdate."}
 
+# Tambahin import ini di bagian atas (barengan import lainnya)
+from services.epod_service import submit_epod_with_ai
+
 # ==========================================
-# 3. SUBMIT E-POD (SECURE UPLOAD + VALIDATION + WATERMARK)
+# 3. SUBMIT E-POD (SECURE UPLOAD + VALIDATION + WATERMARK + AI ANOMALY REJECTION)
 # ==========================================
 ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"]
 MAX_FILE_SIZE_MB = 5
@@ -217,7 +220,6 @@ async def submit_epod(
         qty_delivered = total_order_kg
         qty_returned = 0.0
         qty_damaged = 0.0
-        final_status = models.DOStatus.delivered_pod_uploaded 
         driver_note = ""
 
         if is_return and return_qty > 0:
@@ -234,6 +236,7 @@ async def submit_epod(
         if file_ext not in ["jpg", "jpeg", "png", "webp"]:
              raise HTTPException(status_code=400, detail="Ekstensi file mencurigakan!")
 
+        # --- PROSES WATERMARK & SAVE FILE ---
         timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         watermark_text = [
             f"Waktu: {timestamp_now} WIB",
@@ -243,32 +246,46 @@ async def submit_epod(
         ]
         
         file_content = add_watermark(file_content, watermark_text)
-        
         filename = f"POD_{line.order_id}_{uuid.uuid4().hex}.jpg"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
         with open(file_path, "wb") as buffer:
             buffer.write(file_content)
 
-        new_pod = models.TMSEpodHistory(
+        photo_url = f"/static/uploads/epod/{filename}"
+
+        # 🌟 ZAP! KIRIM KE OTAK AI BUAT DIANALISIS (ANOMALY REJECTION & SERVICE TIME)
+        ai_result = submit_epod_with_ai(
+            db=db,
             line_id=line_id,
-            status=final_status,
-            timestamp=datetime.now(),
-            photo_url=f"/static/uploads/epod/{filename}",
-            gps_location_lat=line.order.latitude,
-            gps_location_lon=line.order.longitude,
             qty_delivered=qty_delivered,
             qty_return=qty_returned,
-            qty_damaged=qty_damaged
+            reason=return_reason if is_return else "",
+            photo_url=photo_url
         )
-        db.add(new_pod)
-        line.order.status = final_status
-        db.commit()
+
+        if ai_result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=ai_result.get("msg"))
+
+        # 🌟 BUMBU RAHASIA: Simpan driver_note & qty_damaged susulan biar ga ribet ubah fungsi AI-nya
+        latest_epod = db.query(models.TMSEpodHistory).filter(
+            models.TMSEpodHistory.line_id == line_id
+        ).order_by(models.TMSEpodHistory.pod_id.desc()).first()
+        
+        if latest_epod:
+            latest_epod.driver_notes = driver_note
+            latest_epod.qty_damaged = qty_damaged
+            db.commit()
+
+        # Kasih tau ke Front-End kalau ternyata supirnya kena flag anomali!
+        alert_msg = "POD berhasil diunggah!"
+        if ai_result.get("status") == "success_with_warning":
+            alert_msg = "POD berhasil diunggah! (Catatan: Waktu bongkar ditandai Anomali oleh AI)"
         
         return {
             "status": "success", 
-            "url": new_pod.photo_url,
-            "message": "POD berhasil diunggah! Menunggu verifikasi admin."
+            "url": photo_url,
+            "message": alert_msg
         }
 
     except HTTPException:

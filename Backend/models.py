@@ -98,8 +98,12 @@ class MasterCustomer(Base):
     kode_customer = Column(String(50), unique=True, index=True)
     store_name = Column(String(100))
     
-    latitude = Column(Numeric(10, 8), nullable=True)
-    longitude = Column(Numeric(11, 8), nullable=True)
+    latitude = Column(Numeric(10, 8), nullable=True) # Titik Google Maps (Default)
+    longitude = Column(Numeric(11, 8), nullable=True) # Titik Google Maps (Default)
+    
+    actual_lat = Column(Numeric(10, 8), nullable=True) # Titik real loading dock dari GPS Truk
+    actual_lng = Column(Numeric(11, 8), nullable=True) # Titik real loading dock dari GPS Truk
+    avg_service_time_per_kg = Column(Float, default=0.0) # Hasil belajar EMA (Berapa menit per KG di toko ini)
     
     address = Column(Text)
     district = Column(String(100))  
@@ -170,8 +174,12 @@ class TMSRouteLine(Base):
     order_id = Column(String(50), ForeignKey("delivery_orders.order_id"))
     
     sequence = Column(Integer)
-    est_arrival = Column(Time)
+    est_arrival = Column(Time) # Estimasi dari VRP
     distance_from_prev_km = Column(Float, default=0.0)
+    
+    actual_arrival_time = Column(DateTime, nullable=True) # Waktu saat GPS Truk ngunci Dwell Time 3 Menit
+    actual_service_minutes = Column(Float, nullable=True) # Selisih submit E-POD dengan actual_arrival_time
+    is_anomaly = Column(Boolean, default=False) # True kalau datanya ngaco/ditolak AI
     
     route_plan = relationship("TMSRoutePlan", back_populates="route_lines")
     order = relationship("DeliveryOrder", back_populates="route_line")
@@ -224,6 +232,10 @@ class SystemSettings(Base):
     cost_overtime_rate = Column(Float, default=25000.0)
     depo_lat = Column(Float, default=-6.207356)
     depo_lon = Column(Float, default=106.479163)
+    
+    geofence_radius_meters = Column(Integer, default=200) # Batas jarak truk dianggap nyampe
+    dwell_time_mins = Column(Integer, default=3) # Harus berhenti berapa menit biar ke-trigger?
+    anomaly_tolerance_percent = Column(Float, default=200.0) # Kalau telat 200% dari rata-rata, reject!
     
     api_gps_webhook = Column(String(255), nullable=True)
     api_temp_sensor = Column(String(255), nullable=True)

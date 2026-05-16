@@ -36,7 +36,8 @@ from routers import (
     settings as settings_router,
     customer as customer_router,
     driver as driver_router,
-    finance as finance_router
+    finance as finance_router,
+    tracking as tracking_router
 )
 
 # ==========================================
@@ -137,7 +138,7 @@ app.include_router(settings_router.router, tags=["Settings"])
 app.include_router(customer_router.router, tags=["Customers"])
 app.include_router(driver_router.router, tags=["Drivers"])
 app.include_router(finance_router.router, tags=["Finance & Expenses"])
-
+app.include_router(tracking_router.router, tags=["Tracking"])
 # ==========================================
 # 6. SYSTEM ENDPOINTS
 # ==========================================
