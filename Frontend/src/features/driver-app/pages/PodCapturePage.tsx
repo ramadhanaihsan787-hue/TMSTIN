@@ -1,91 +1,77 @@
-// src/features/driver-app/pages/PodCapturePage.tsx
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SignatureCanvas from 'react-signature-canvas';
-import { toast } from 'sonner'; // 🌟 SUNTIKAN SONNER!
 import Header from '../../../shared/components/Header';
-
-import { driverappService } from '../services/driverappService';
-import { useDriverappFlow } from '../hooks/useDriverappFlow';
 
 const DriverPodCapture: React.FC = () => {
     const navigate = useNavigate();
-    const { activeStop, submitPod } = useDriverappFlow(); 
-    
     const sigCanvas = useRef<SignatureCanvas>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [photoFile, setPhotoFile] = useState<File | null>(null); 
-    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Return (Retur) States
     const [hasReturn, setHasReturn] = useState(false);
-    const [returnProduct, setReturnProduct] = useState('');
-    const [returnQty, setReturnQty] = useState('');
-    const [returnReason, setReturnReason] = useState('');
+    const [returnItems, setReturnItems] = useState([
+        { skuProduct: '', qty: '', reason: '' }
+    ]);
+    const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
+    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
 
-    const mockProducts = [
-        "Karkas Ayam Broiler 1.0 - 1.2kg",
-        "Boneless Dada Ayam (BLD)",
-        "Boneless Paha Ayam (BLP)",
-        "Sayap Ayam (Wings)",
-        "Ati Ampela Ayam (Pack)"
+    useEffect(() => {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'class') {
+                    setIsDarkMode(document.documentElement.classList.contains('dark'));
+                }
+            });
+        });
+
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class'],
+        });
+
+        return () => observer.disconnect();
+    }, []);
+
+    const mockSkus = [
+        { sku: "SGF-CK-001", name: "Karkas Ayam Broiler 1.0 - 1.2kg" },
+        { sku: "SGF-CK-002", name: "Boneless Dada Ayam (BLD)" },
+        { sku: "SGF-CK-003", name: "Boneless Paha Ayam (BLP)" },
+        { sku: "SGF-CK-004", name: "Sayap Ayam (Wings)" },
+        { sku: "SGF-CK-005", name: "Ati Ampela Ayam (Pack)" },
+        { sku: "SGF-CK-006", name: "Ayam Utuh Segar" },
+        { sku: "SGF-CK-007", name: "Paha Bawah (Drumstick)" }
     ];
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            setPhotoFile(file); 
             const reader = new FileReader();
             reader.onloadend = () => {
-                setCapturedImage(reader.result as string); 
+                setCapturedImage(reader.result as string);
             };
             reader.readAsDataURL(file);
         }
     };
 
-    const triggerCamera = () => fileInputRef.current?.click();
-    const clearSignature = () => sigCanvas.current?.clear();
+    const triggerCamera = () => {
+        fileInputRef.current?.click();
+    };
+
+    const clearSignature = () => {
+        sigCanvas.current?.clear();
+    };
 
     const removePhoto = (e: React.MouseEvent) => {
         e.stopPropagation();
         setCapturedImage(null);
-        setPhotoFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-
-    const isFormValid = capturedImage && (!hasReturn || (returnProduct && returnQty && returnReason));
-
-    const handleSubmit = async () => {
-        if (!isFormValid || !activeStop || !photoFile) return;
-        
-        setIsSubmitting(true);
-        try {
-            const formData = new FormData();
-            formData.append('file', photoFile);
-            formData.append('has_return', hasReturn ? 'true' : 'false');
-            
-            if (hasReturn) {
-                formData.append('return_product', returnProduct);
-                formData.append('return_qty', returnQty);
-                formData.append('return_reason', returnReason);
-            }
-
-            await driverappService.submitEpod(activeStop.id, formData);
-            
-            // 🌟 FIX CTO: Ganti alert jadi toast.success
-            toast.success("Berhasil ngirim bukti pengiriman!");
-            submitPod(); 
-            navigate('/driver/routes'); 
-        } catch (error) {
-            console.error(error);
-            // 🌟 FIX CTO: Ganti alert jadi toast.error
-            toast.error("Gagal ngirim data, coba lagi bos!");
-        } finally {
-            setIsSubmitting(false);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
+
+    const isFormValid = capturedImage && (!hasReturn || returnItems.every(item => item.skuProduct && item.qty && item.reason));
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-[#0a0a0a] font-sans transition-colors duration-300">
@@ -94,6 +80,7 @@ const DriverPodCapture: React.FC = () => {
             <main className="max-w-md mx-auto px-4 py-6 flex flex-col min-h-[calc(100vh-80px)]">
                 <div className="bg-white dark:bg-[#111111] rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-white/5 space-y-8">
 
+                    {/* Return Selection Toggle */}
                     <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/10">
                         <div className="flex items-center justify-between mb-4">
                             <div>
@@ -116,52 +103,118 @@ const DriverPodCapture: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Return Form (Dynamic) */}
                         {hasReturn && (
-                            <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-white/10 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Produk Retur</label>
-                                    <select
-                                        value={returnProduct}
-                                        onChange={(e) => setReturnProduct(e.target.value)}
-                                        className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
-                                    >
-                                        <option value="">Pilih Produk...</option>
-                                        {mockProducts.map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                </div>
+                            <div className="space-y-6 pt-4 border-t border-slate-200 dark:border-white/10 animate-in fade-in slide-in-from-top-2 duration-300">
+                                {returnItems.map((item, index) => (
+                                    <div key={index} className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/10 relative">
+                                        {returnItems.length > 1 && (
+                                            <button
+                                                onClick={() => {
+                                                    const newItems = returnItems.filter((_, i) => i !== index);
+                                                    setReturnItems(newItems);
+                                                }}
+                                                className="absolute top-2 right-2 text-red-500 hover:text-red-700 w-6 h-6 flex items-center justify-center bg-white dark:bg-[#111111] rounded-full shadow-sm"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">close</span>
+                                            </button>
+                                        )}
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Quantity (KG)</label>
-                                        <input
-                                            type="number"
-                                            value={returnQty}
-                                            onChange={(e) => setReturnQty(e.target.value)}
-                                            placeholder="0.00"
-                                            className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
-                                        />
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Produk & SKU</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={item.skuProduct}
+                                                        onChange={(e) => {
+                                                            const newItems = [...returnItems];
+                                                            newItems[index].skuProduct = e.target.value;
+                                                            setReturnItems(newItems);
+                                                            setActiveDropdownIndex(index);
+                                                        }}
+                                                        onFocus={() => setActiveDropdownIndex(index)}
+                                                        onBlur={() => setTimeout(() => setActiveDropdownIndex(null), 200)}
+                                                        placeholder="Cari SKU atau Produk..."
+                                                        className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
+                                                    />
+                                                    {activeDropdownIndex === index && item.skuProduct && (
+                                                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-[#2c2e33] rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 max-h-40 overflow-y-auto">
+                                                            {mockSkus
+                                                                .filter(s =>
+                                                                    s.sku.toLowerCase().includes(item.skuProduct.toLowerCase()) ||
+                                                                    s.name.toLowerCase().includes(item.skuProduct.toLowerCase())
+                                                                )
+                                                                .map(s => (
+                                                                    <div
+                                                                        key={s.sku}
+                                                                        onMouseDown={() => {
+                                                                            const newItems = [...returnItems];
+                                                                            newItems[index].skuProduct = `${s.sku} - ${s.name}`;
+                                                                            setReturnItems(newItems);
+                                                                            setActiveDropdownIndex(null);
+                                                                        }}
+                                                                        className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer border-b border-slate-50 dark:border-white/5 last:border-0"
+                                                                    >
+                                                                        <p className="text-xs font-bold text-slate-900 dark:text-white">{s.sku}</p>
+                                                                        <p className="text-[10px] text-slate-400 font-medium">{s.name}</p>
+                                                                    </div>
+                                                                ))
+                                                            }
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Quantity (KG)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={item.qty}
+                                                        onChange={(e) => {
+                                                            const newItems = [...returnItems];
+                                                            newItems[index].qty = e.target.value;
+                                                            setReturnItems(newItems);
+                                                        }}
+                                                        placeholder="0.00"
+                                                        className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Alasan Retur</label>
+                                                    <select
+                                                        value={item.reason}
+                                                        onChange={(e) => {
+                                                            const newItems = [...returnItems];
+                                                            newItems[index].reason = e.target.value;
+                                                            setReturnItems(newItems);
+                                                        }}
+                                                        className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
+                                                    >
+                                                        <option value="">Pilih Alasan...</option>
+                                                        <option value="Quality Issues">Quality Issues</option>
+                                                        <option value="Mismatched SKU">Mismatched SKU</option>
+                                                        <option value="Customer Rejection">Customer Rejection</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Alasan Retur</label>
-                                        <select
-                                            value={returnReason}
-                                            onChange={(e) => setReturnReason(e.target.value)}
-                                            className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
-                                        >
-                                            <option value="">Pilih Alasan...</option>
-                                            <option value="Barang Rusak">Barang Rusak</option>
-                                            <option value="Packaging Bocor">Packaging Bocor</option>
-                                            <option value="Kadaluarsa">Kadaluarsa</option>
-                                            <option value="Salah Produk">Salah Produk</option>
-                                            <option value="Customer Tidak Ada">Customer Tidak Ada</option>
-                                            <option value="Lainnya">Lainnya</option>
-                                        </select>
-                                    </div>
-                                </div>
+                                ))}
+
+                                <button
+                                    onClick={() => setReturnItems([...returnItems, { skuProduct: '', qty: '', reason: '' }])}
+                                    className="w-full h-12 bg-primary/10 text-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/20 transition-all"
+                                >
+                                    <span className="material-symbols-outlined text-lg">add</span>
+                                    Tambah Produk Retur
+                                </button>
                             </div>
                         )}
                     </div>
 
+                    {/* Photo capture */}
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -201,6 +254,7 @@ const DriverPodCapture: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Signature section */}
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
                             <div>
@@ -218,8 +272,9 @@ const DriverPodCapture: React.FC = () => {
 
                         <div className="h-48 bg-slate-50 dark:bg-[#0a0a0a] rounded-2xl border border-slate-100 dark:border-white/10 relative shadow-inner overflow-hidden">
                             <SignatureCanvas
+                                key={isDarkMode ? 'dark' : 'light'}
                                 ref={sigCanvas}
-                                penColor="white"
+                                penColor={isDarkMode ? "white" : "black"}
                                 canvasProps={{
                                     className: "signature-canvas w-full h-full",
                                     style: { width: '100%', height: '100%' }
@@ -237,14 +292,14 @@ const DriverPodCapture: React.FC = () => {
 
                 <div className="mt-auto pt-8 pb-8 space-y-4">
                     <button
-                        onClick={handleSubmit} 
-                        disabled={!isFormValid || isSubmitting}
-                        className={`w-full h-16 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-95 uppercase tracking-wide ${isFormValid && !isSubmitting
+                        onClick={() => navigate('/driver/summary')}
+                        disabled={!isFormValid}
+                        className={`w-full h-16 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-95 uppercase tracking-wide ${isFormValid
                             ? 'bg-primary hover:bg-primary/90 text-white shadow-primary/20'
                             : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed shadow-none'
                             }`}
                     >
-                        {isSubmitting ? 'MENGIRIM...' : 'KIRIM BUKTI (SUBMIT)'}
+                        KIRIM BUKTI (SUBMIT)
                     </button>
 
                     <button className="w-full py-2 text-slate-400 hover:text-red-500 font-bold text-[10px] uppercase tracking-widest transition-colors">

@@ -42,7 +42,7 @@ export default function LogisticsLayout() {
                 </header>
 
                 {/* 🌟 HEADER GLOBAL (Ngambil title dari Zustand) */}
-                <div className="hidden lg:block z-10">
+                <div className="hidden lg:block relative z-40">
                     <Header title={title} />
                 </div>
 

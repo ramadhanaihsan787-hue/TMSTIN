@@ -43,7 +43,7 @@ def expense_to_dict(e: models.OperationalExpense) -> dict:
 def create_expense(
     data: schemas.ExpenseCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik", "kasir"))
 ):
     try:
         new_expense = models.OperationalExpense(
@@ -80,7 +80,7 @@ def update_expense(
     expense_id: str,
     data: schemas.ExpenseCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik", "kasir"))
 ):
     expense = db.query(models.OperationalExpense).filter(models.OperationalExpense.id == expense_id).first()
     if not expense:
@@ -156,7 +156,7 @@ def get_today_expenses(
 def delete_expense(
     expense_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("manager_logistik", "admin_distribusi"))
+    current_user: models.User = Depends(require_role("manager_logistik", "admin_distribusi", "kasir"))
 ):
     expense = db.query(models.OperationalExpense).filter(models.OperationalExpense.id == expense_id).first()
     if not expense:

@@ -4,7 +4,7 @@ Create Default Admin Users
 import logging
 from database import SessionLocal
 from core.security import get_password_hash
-from core.enums import UserRole
+from models import UserRole
 import models
 
 # 🌟 SETUP LOGGER KHUSUS SCRIPT
@@ -16,15 +16,6 @@ def create_default_users():
     db = SessionLocal()
     
     try:
-        # Check if users already exist
-        existing = db.query(models.User).first()
-        if existing:
-            logger.warning("⚠️  User sudah ada!")
-            logger.info("Users yang terdaftar:")
-            for u in db.query(models.User).all():
-                logger.info(f"  - {u.username} ({u.role.value})")
-            return
-        
         # Define default users
         default_users = [
             {
@@ -50,11 +41,22 @@ def create_default_users():
                 "password": "japfa123",
                 "full_name": "Supir Satu",
                 "role": UserRole.driver
+            },
+            {
+                "username": "kasir",
+                "password": "japfa123",
+                "full_name": "Mbak Kasir",
+                "role": UserRole.kasir
             }
         ]
         
-        # Create users
+        # Create users if they don't exist
         for user_data in default_users:
+            existing = db.query(models.User).filter_by(username=user_data["username"]).first()
+            if existing:
+                logger.info(f"⚠️  User already exists: {user_data['username']} ({existing.role.value})")
+                continue
+                
             new_user = models.User(
                 username=user_data["username"],
                 hashed_password=get_password_hash(user_data["password"]),
@@ -65,7 +67,7 @@ def create_default_users():
             logger.info(f"✅ Created user: {user_data['username']}")
         
         db.commit()
-        logger.info("\n✅ Semua default user berhasil dibuat!")
+        logger.info("\n✅ Proses inisialisasi user selesai!")
         
     except Exception as e:
         logger.error(f"❌ Error: {e}", exc_info=True)

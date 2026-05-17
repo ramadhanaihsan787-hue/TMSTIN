@@ -21,11 +21,11 @@ export default function Sidebar() {
         { to: "/logistik/drivers", icon: "badge", label: "Driver List", roles: ['admin_distribusi'] },
         { to: "/logistik/customers", icon: "groups", label: "Customer Data", roles: ['admin_distribusi'] },
         { to: "/logistik/analytics", icon: "analytics", label: "Analytics", roles: ['admin_distribusi'] },
-        
+
         // --- MENU MANAGER LOGISTIK ---
-        { 
-            label: "Manager Logistik", 
-            icon: "monitoring", 
+        {
+            label: "Manager Logistik",
+            icon: "monitoring",
             roles: ['manager_logistik'],
             submenu: [
                 { to: "/manager/overview", label: "Overview", icon: "grid_view" },
@@ -40,7 +40,8 @@ export default function Sidebar() {
 
         // --- MENU KASIR / FINANCE ---
         // 🌟 FIX CTO: Akses Manager dicabut, sekarang murni cuma buat Kasir!
-        { to: "/finance", icon: "account_balance_wallet", label: "Finance & Expense", roles: ['kasir'] },
+        { to: "/finance", icon: "account_balance_wallet", label: "Finance & Expense", end: true, roles: ['kasir'] },
+        { to: "/finance/history", icon: "history", label: "Riwayat Cost", roles: ['kasir'] },
     ];
 
     return (
@@ -111,7 +112,7 @@ export default function Sidebar() {
                                             <span className="material-symbols-outlined">{item.icon}</span>
                                             {!isCollapsed && <span className="text-sm">{item.label}</span>}
                                         </div>
-                                        
+
                                         {/* 🌟 RENDER SUB-MENU DENGAN GAYA CLEAN */}
                                         {!isCollapsed && item.submenu?.map((sub, sIdx) => (
                                             <NavLink
@@ -120,8 +121,8 @@ export default function Sidebar() {
                                                 onClick={closeMobileMenu}
                                                 className={({ isActive }) => `
                                                     flex items-center gap-3 ml-4 pl-4 py-2.5 mt-1 rounded-xl transition-all
-                                                    ${isActive 
-                                                        ? 'bg-japfa-orange/10 text-japfa-orange font-bold' 
+                                                    ${isActive
+                                                        ? 'bg-japfa-orange/10 text-japfa-orange font-bold'
                                                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 font-medium'}
                                                 `}
                                             >
@@ -136,7 +137,7 @@ export default function Sidebar() {
                     })}
 
                     <div className="my-4 border-t border-slate-200 dark:border-white/5"></div>
-                    
+
                     {/* SETTINGS (Role Admin Distribusi) */}
                     {role === 'admin_distribusi' && (
                         <NavLink
@@ -159,7 +160,7 @@ export default function Sidebar() {
                             <div className="flex items-center gap-3">
                                 <div className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700 bg-cover bg-center border-2 border-primary/50 shadow-inner" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuA_CoqZM_f895VVG6xXC0MfnjI98mvn3WcDUJwkb1Hv3GGpHUO2HqGmx5horSlkjjgo7VZT8jXmkKux0MWPCZ_-HDsrLO5o0twThB3MVIJzR-npaiY6dKeL0j48vcU_DvCalF7abl13097MKhMih--TbrpNZ2ztDSje7k4rVTzwhvkz4_uAXn-Ah7qYsJZDKOmrh_1DwiFmgurQFlK69gGKx0FFrylODtnN8lTk13zSVEUZQv2NchBDLLntLpHLoFkEeF3kN4BcQ6c')" }}></div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">Ihsan Tuan</p>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">Dini Dwi</p>
                                     <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate uppercase tracking-tight">{role?.replace('_', ' ')}</p>
                                 </div>
                             </div>
@@ -215,7 +216,7 @@ export default function Sidebar() {
                         <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 bg-cover bg-center border border-slate-300 dark:border-white/20 shrink-0" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuA_CoqZM_f895VVG6xXC0MfnjI98mvn3WcDUJwkb1Hv3GGpHUO2HqGmx5horSlkjjgo7VZT8jXmkKux0MWPCZ_-HDsrLO5o0twThB3MVIJzR-npaiY6dKeL0j48vcU_DvCalF7abl13097MKhMih--TbrpNZ2ztDSje7k4rVTzwhvkz4_uAXn-Ah7qYsJZDKOmrh_1DwiFmgurQFlK69gGKx0FFrylODtnN8lTk13zSVEUZQv2NchBDLLntLpHLoFkEeF3kN4BcQ6c')" }}></div>
                         {!isCollapsed && (
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">Ihsan Tuan</p>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">Dini Dwi</p>
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online
                                 </p>
