@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from io import BytesIO
+from datetime import datetime
 import pandas as pd
 import json
 import time
@@ -290,13 +291,21 @@ def approve_pod(
     if not order: 
         raise HTTPException(status_code=404, detail="Order tidak ditemukan")
     
-    # 🌟 FIX CTO: Cek status sesuai DB (DELIVERED_SUCCESS atau DELIVERED_PARTIAL)
-    valid_statuses = [models.DOStatus.delivered_success, models.DOStatus.delivered_partial]
+    # Allow DELIVERED_POD_UPLOADED, DELIVERED_SUCCESS, and DELIVERED_PARTIAL
+    valid_statuses = [
+        models.DOStatus.delivered_pod_uploaded,
+        models.DOStatus.delivered_success,
+        models.DOStatus.delivered_partial
+    ]
     if order.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Tidak bisa approve POD. Status DO saat ini: {order.status.value}")
 
-    # 🌟 FIX CTO: Kalau POD valid, status akhir jadi BILLED (Siap ditagih Finance)
+    # Kalau POD valid, status akhir jadi BILLED (Siap ditagih Finance)
     order.status = models.DOStatus.billed
+
+    # Update status di record e-POD history jika ada
+    if order.route_line and order.route_line.epod:
+        order.route_line.epod.status = models.DOStatus.billed
 
     db.commit()
     
@@ -319,13 +328,29 @@ def reject_pod(
     if not order: 
         raise HTTPException(status_code=404, detail="Order tidak ditemukan")
     
-    # 🌟 FIX CTO: Cek status
-    valid_statuses = [models.DOStatus.delivered_success, models.DOStatus.delivered_partial]
+    # Allow DELIVERED_POD_UPLOADED, DELIVERED_SUCCESS, and DELIVERED_PARTIAL
+    valid_statuses = [
+        models.DOStatus.delivered_pod_uploaded,
+        models.DOStatus.delivered_success,
+        models.DOStatus.delivered_partial
+    ]
     if order.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Tidak bisa reject POD. Status DO saat ini: {order.status.value}")
 
-    # 🌟 FIX CTO: Balikin ke status jalan biar muncul lagi di aplikasi HP Supir
+    # Balikin ke status jalan biar muncul lagi di aplikasi HP Supir
     order.status = models.DOStatus.do_assigned_to_route
+    
+    # Update status di record e-POD history jika ada (atau di-reject, tandai kembali ke assigned)
+    if order.route_line and order.route_line.epod:
+        # Kita bisa menambahkan alasan reject ke driver_notes agar supir tahu alasan ditolak
+        rejection_note = f"DITOLAK ADMIN. Alasan: {data.reason}"
+        if data.notes:
+            rejection_note += f" ({data.notes})"
+        order.route_line.epod.status = models.DOStatus.do_assigned_to_route
+        if order.route_line.epod.driver_notes:
+            order.route_line.epod.driver_notes += f" | {rejection_note}"
+        else:
+            order.route_line.epod.driver_notes = rejection_note
     
     db.commit()
     
@@ -335,6 +360,139 @@ def reject_pod(
         "order_id": order_id, 
         "new_status": order.status.value
     }
+
+
+@router.get("/pod/verifications")
+def get_pod_verifications(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(require_role("admin_pod"))
+):
+    orders = db.query(models.DeliveryOrder).filter(
+        models.DeliveryOrder.status == models.DOStatus.delivered_pod_uploaded
+    ).all()
+    
+    data = []
+    for o in orders:
+        customer = o.customer
+        route_line = o.route_line
+        epod = route_line.epod if route_line else None
+        route_plan = route_line.route_plan if route_line else None
+        driver = route_plan.driver if route_plan else None
+        vehicle = route_plan.vehicle if route_plan else None
+        
+        items = []
+        if o.service_type and o.service_type.startswith('['):
+            try:
+                items = json.loads(o.service_type)
+            except Exception:
+                pass
+        
+        data.append({
+            "order_id": o.order_id,
+            "customer_name": customer.store_name if customer else "Unknown Store",
+            "customer_address": customer.address if customer else "Unknown Address",
+            "driver_name": driver.name if driver else "Unknown Driver",
+            "driver_phone": driver.phone if driver else "",
+            "vehicle_plate": vehicle.license_plate if vehicle else "",
+            "vehicle_type": vehicle.type if vehicle else "",
+            "photo_url": epod.photo_url if epod else "",
+            "gps_lat": float(epod.gps_location_lat) if (epod and epod.gps_location_lat) else None,
+            "gps_lon": float(epod.gps_location_lon) if (epod and epod.gps_location_lon) else None,
+            "qty_delivered": epod.qty_delivered if epod else (o.weight_total or 0.0),
+            "qty_return": epod.qty_return if epod else 0.0,
+            "qty_damaged": epod.qty_damaged if epod else 0.0,
+            "return_reason": epod.return_reason if epod else "",
+            "driver_notes": epod.driver_notes if epod else "",
+            "timestamp": epod.timestamp.strftime("%Y-%m-%d %H:%M:%S") if (epod and epod.timestamp) else "",
+            "items": items
+        })
+        
+    return {
+        "status": "success",
+        "total": len(data),
+        "data": data
+    }
+
+
+@router.get("/pod/history")
+def get_pod_history(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin_pod"))
+):
+    query = db.query(models.DeliveryOrder).filter(
+        models.DeliveryOrder.status.in_([
+            models.DOStatus.billed,
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial
+        ])
+    )
+    
+    if status and status != "ALL":
+        try:
+            if status == "SUCCESS":
+                query = query.filter(models.DeliveryOrder.status == models.DOStatus.billed)
+            elif status == "PARTIAL":
+                query = query.filter(models.DeliveryOrder.status == models.DOStatus.delivered_partial)
+            elif status == "DELIVERED_SUCCESS":
+                query = query.filter(models.DeliveryOrder.status == models.DOStatus.delivered_success)
+        except Exception:
+            pass
+            
+    orders = query.all()
+    
+    data = []
+    for o in orders:
+        customer = o.customer
+        route_line = o.route_line
+        epod = route_line.epod if route_line else None
+        route_plan = route_line.route_plan if route_line else None
+        driver = route_plan.driver if route_plan else None
+        vehicle = route_plan.vehicle if route_plan else None
+        
+        driver_name = driver.name if driver else "Unknown Driver"
+        customer_name = customer.store_name if customer else "Unknown Store"
+        
+        if search:
+            s = search.lower()
+            if s not in o.order_id.lower() and s not in driver_name.lower() and s not in customer_name.lower():
+                continue
+                
+        items = []
+        if o.service_type and o.service_type.startswith('['):
+            try:
+                items = json.loads(o.service_type)
+            except Exception:
+                pass
+                
+        data.append({
+            "order_id": o.order_id,
+            "customer_name": customer_name,
+            "customer_address": customer.address if customer else "Unknown Address",
+            "driver_name": driver_name,
+            "driver_phone": driver.phone if driver else "",
+            "vehicle_plate": vehicle.license_plate if vehicle else "",
+            "vehicle_type": vehicle.type if vehicle else "",
+            "photo_url": epod.photo_url if epod else "",
+            "gps_lat": float(epod.gps_location_lat) if (epod and epod.gps_location_lat) else None,
+            "gps_lon": float(epod.gps_location_lon) if (epod and epod.gps_location_lon) else None,
+            "qty_delivered": epod.qty_delivered if epod else (o.weight_total or 0.0),
+            "qty_return": epod.qty_return if epod else 0.0,
+            "qty_damaged": epod.qty_damaged if epod else 0.0,
+            "return_reason": epod.return_reason if epod else "",
+            "driver_notes": epod.driver_notes if epod else "",
+            "status": o.status.value,
+            "timestamp": epod.timestamp.strftime("%Y-%m-%d %H:%M:%S") if (epod and epod.timestamp) else "",
+            "items": items
+        })
+        
+    return {
+        "status": "success",
+        "total": len(data),
+        "data": data
+    }
+
 
 @router.put("/orders/{order_id}/weight", response_model=schemas.OrderActionResponse)
 def update_weight(order_id: str, data: WeightUpdateRequest, db: Session = Depends(get_db)):

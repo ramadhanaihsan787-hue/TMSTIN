@@ -349,7 +349,7 @@ export default function KasirDashboard() {
 
                 {/* KANAN: Summary Breakdown */}
                 <aside className="w-full lg:w-96 sticky top-28 space-y-6 shrink-0 z-20">
-                    <div className="bg-white dark:bg-[#111111] rounded-xl shadow-sm dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)] border border-slate-100 dark:border-white/5 overflow-hidden">
+                    <div className="bg-white dark:bg-[#111111] rounded-xl shadow-sm dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)] border border-slate-100 dark:border-white/5 overflow-hidden relative">
                         <div className="bg-gradient-to-r from-[#994700] to-[#FF7A00] p-6 text-white">
                             <h3 className="font-extrabold text-xl tracking-tight">Summary Breakdown</h3>
                             <p className="text-white/80 text-sm mt-1">Review expenses before submitting</p>
@@ -396,6 +396,86 @@ export default function KasirDashboard() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Overlay Detail Biaya */}
+                        {detailEntry && (
+                            <div className="absolute inset-0 bg-white dark:bg-[#111111] z-30 flex flex-col animate-[fadeIn_0.2s_ease-out]">
+                                {/* Sleek Header */}
+                                <div className="bg-gradient-to-r from-[#994700] to-[#FF7A00] p-6 text-white flex justify-between items-center border-b border-slate-100 dark:border-white/5">
+                                    <div>
+                                        <h3 className="font-extrabold text-lg tracking-tight">Rincian Biaya</h3>
+                                        <p className="text-white/80 text-xs mt-0.5">Detail operational expenses</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => setDetailEntry(null)} 
+                                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white flex items-center justify-center"
+                                    >
+                                        <span className="material-symbols-outlined text-xl">close</span>
+                                    </button>
+                                </div>
+                                
+                                {/* Body Content */}
+                                <div className="p-6 flex-1 flex flex-col justify-between overflow-y-auto space-y-4">
+                                    <div className="space-y-4">
+                                        {/* Meta details */}
+                                        <div className="flex justify-between items-start text-sm">
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Armada / Waktu</p>
+                                                <p className="font-bold text-slate-950 dark:text-white">{detailEntry.plate}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">{detailEntry.time} • {new Date(detailEntry.date).toLocaleDateString('id-ID')}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Driver</p>
+                                                <p className="font-bold text-slate-950 dark:text-white">{detailEntry.driver}</p>
+                                            </div>
+                                        </div>
+
+                                        {detailEntry.helperName && (
+                                            <div className="flex justify-between items-center text-sm pb-3 border-b border-slate-100 dark:border-white/5">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Helper</span>
+                                                <span className="font-bold text-slate-950 dark:text-white">{detailEntry.helperName}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Expenses list */}
+                                        <div className="space-y-2.5 bg-slate-50 dark:bg-white/[0.02] p-4 rounded-xl border border-slate-100 dark:border-white/5">
+                                            {[
+                                                { label: 'BBM (Solar)', val: detailEntry.bbm },
+                                                { label: 'Total Tol', val: detailEntry.tol },
+                                                { label: 'Parkir Resmi', val: detailEntry.parkir },
+                                                { label: 'Parkir Liar', val: detailEntry.parkirLiar },
+                                                { label: 'Kuli Angkut/DLL', val: detailEntry.kuliAngkut },
+                                                { label: 'Helper Harian', val: detailEntry.lainLain }
+                                            ].map(item => item.val > 0 && (
+                                                <div key={item.label} className="flex justify-between text-sm items-center">
+                                                    <span className="font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
+                                                    <span className="font-bold text-slate-950 dark:text-white">{formatRp(item.val)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Bottom Section */}
+                                    <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</span>
+                                            <span className="text-2xl font-black text-[#FF7A00]">{formatRp(detailEntry.total)}</span>
+                                        </div>
+                                        
+                                        <button
+                                            onClick={() => {
+                                                handleEdit(detailEntry);
+                                                setDetailEntry(null);
+                                            }}
+                                            className="w-full bg-gradient-to-r from-[#994700] to-[#FF7A00] hover:scale-[1.02] active:scale-95 text-white py-3.5 rounded-lg font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">edit_note</span>
+                                            Edit Transaksi Ini
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </aside>
             </div>
@@ -468,56 +548,7 @@ export default function KasirDashboard() {
             </section>
             
             {/* Modal Detail Biaya */}
-            {detailEntry && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" onClick={() => setDetailEntry(null)}>
-                    <div className="bg-white dark:bg-[#1A1A1A] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[slideUp_0.3s_ease-out]" onClick={e => e.stopPropagation()}>
-                        <div className="bg-slate-50 dark:bg-white/5 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-white/5">
-                            <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Rincian Biaya</h3>
-                            <button onClick={() => setDetailEntry(null)} className="p-1 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors">
-                                <span className="material-symbols-outlined text-slate-500">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="flex justify-between items-center text-sm mb-4">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Armada / Waktu</p>
-                                    <p className="font-bold text-slate-900 dark:text-white">{detailEntry.plate}</p>
-                                    <p className="text-xs text-slate-500">{detailEntry.time} • {new Date(detailEntry.date).toLocaleDateString('id-ID')}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Driver</p>
-                                    <p className="font-bold text-slate-900 dark:text-white">{detailEntry.driver}</p>
-                                </div>
-                            </div>
-                            {detailEntry.helperName && (
-                                <div className="flex justify-between items-center text-sm mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Helper</span>
-                                    <span className="font-bold text-slate-900 dark:text-white">{detailEntry.helperName}</span>
-                                </div>
-                            )}
-                            <div className="space-y-3 bg-slate-50 dark:bg-[#111] p-4 rounded-xl border border-slate-100 dark:border-white/5">
-                                {[
-                                    { label: 'BBM (Solar)', val: detailEntry.bbm },
-                                    { label: 'Total Tol', val: detailEntry.tol },
-                                    { label: 'Parkir Resmi', val: detailEntry.parkir },
-                                    { label: 'Parkir Liar', val: detailEntry.parkirLiar },
-                                    { label: 'Kuli Angkut/DLL', val: detailEntry.kuliAngkut },
-                                    { label: 'Helper Harian', val: detailEntry.lainLain }
-                                ].map(item => item.val > 0 && (
-                                    <div key={item.label} className="flex justify-between text-sm items-center">
-                                        <span className="font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
-                                        <span className="font-bold text-slate-900 dark:text-white">{formatRp(item.val)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="mt-2 pt-2 flex justify-between items-center">
-                                <span className="font-black uppercase tracking-widest text-slate-500">Grand Total</span>
-                                <span className="text-2xl font-black text-primary">{formatRp(detailEntry.total)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Modal removed and moved to Sidebar Overlay */}
         </div>
     );
 }

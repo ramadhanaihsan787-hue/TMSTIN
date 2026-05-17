@@ -8,11 +8,11 @@ export default function LoginForm() {
         <div className="flex flex-col justify-center flex-1 px-8 md:px-16 lg:px-12 xl:px-20 py-12">
             {/* Logo */}
             <div className="flex items-center gap-3 mb-12">
-                <div className="bg-white p-1 rounded-lg w-30 h-30 flex items-center justify-center shrink-0">
+                <div className="bg-white p-2 rounded-lg w-30 h-16 flex items-center justify-center shrink-0 shadow-sm border border-slate-100 dark:border-white/10">
                     <img src="/japfa-logo.png" alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 <span className="font-bold text-2xl tracking-tight font-sans whitespace-nowrap">
-                    <span className="text-primary">TMS </span>
+                    <span className="text-primary">TMS</span>
                 </span>
             </div>
 
@@ -73,8 +73,8 @@ export default function LoginForm() {
                 </div>
 
                 {/* Submit Button */}
-                <button 
-                    className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50" 
+                <button
+                    className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
                     type="submit"
                     disabled={isLoading}
                 >
