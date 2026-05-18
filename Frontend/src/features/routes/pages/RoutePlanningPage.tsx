@@ -7,6 +7,8 @@ import {
     zonePolygons, buildZonesGeoJSON, type TruckTracking, type CustomerDrop
 } from '../../dashboard/components/trackingData';
 import FleetTrackingMap from './FleetTrackingMap';
+import UploadVerificationModal from '../components/UploadVerificationModal';
+import TruckList from '../components/TruckList';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../../shared/services/apiClient';
@@ -83,76 +85,7 @@ const formatTimeWindow = (timeStr: string, weight: number) => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} - ${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
 };
 
-const Truck3D = ({ plateNumber, driverName, truckType, zone, colorHex, percent, outerText, loadKg, colorClass, isSelected, onClick }: Truck3DProps) => {
-    return (
-        <div onClick={onClick} className={`bg-white dark:bg-[#1F1F1F] p-4 rounded-xl shadow-sm transition-all cursor-pointer ${isSelected ? 'border-2 border-primary ring-4 ring-primary/5 shadow-md scale-[1.02]' : 'border border-slate-200 dark:border-[#333] hover:border-primary/50'}`}>
-            <div className="flex justify-between items-start mb-3">
-                <div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-bold text-slate-900 dark:text-white">{plateNumber}</span>
-                        {isSelected && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">SELECTED</span>}
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{driverName} | {truckType}</p>
-                </div>
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-300">ZONE: {zone}</span>
-            </div>
 
-            <div className="mt-4 bg-[#111111] rounded-2xl p-6 border border-[#333] shadow-[0_4px_20px_rgba(0,0,0,0.5)] relative overflow-hidden">
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-${colorClass}-500/10 blur-[40px] rounded-full pointer-events-none`}></div>
-                <div className="flex justify-between items-baseline mb-3 relative z-10">
-                    <span className="text-sm font-black text-white uppercase tracking-wider">Load Factor</span>
-                    <span className={`text-[10px] font-black text-${colorClass}-400 bg-${colorClass}-400/10 px-2 py-1 rounded border border-${colorClass}-400/20 uppercase shadow-[0_0_10px_rgba(0,0,0,0.2)]`}>{outerText}</span>
-                </div>
-                <div className="flex justify-between text-xs mb-1 relative z-10"><span className="text-slate-400 font-medium uppercase">Current Load</span><span className="font-bold text-white">{loadKg}</span></div>
-
-                {/* Simple flat truck illustration */}
-                <div className="relative w-full h-36 flex items-center justify-center mt-4">
-                    <div className="relative flex items-end gap-[2px]">
-                        {/* CONTAINER - simple box */}
-                        <div className="relative w-[160px] h-[56px] rounded-md border-2 border-slate-600 overflow-hidden bg-slate-700">
-                            {/* Load fill */}
-                            <div className="absolute inset-0 rounded-sm" style={{ width: `${percent}%`, background: `linear-gradient(135deg, ${colorHex}, ${colorHex}dd)` }}>
-                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(255,255,255,0.5) 6px, rgba(255,255,255,0.5) 12px)' }}></div>
-                            </div>
-                            {/* Percent label */}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-white font-black text-2xl drop-shadow-lg">{percent}%</span>
-                            </div>
-                            {/* Container rear door lines */}
-                            <div className="absolute left-0 top-0 h-full w-[2px] bg-slate-500"></div>
-                            <div className="absolute left-[3px] top-[25%] h-[50%] w-[1px] bg-slate-500/50"></div>
-                        </div>
-                        {/* CAB - bus head shape */}
-                        <div className="relative w-[48px] h-[48px] bg-slate-300 border-2 border-slate-600 rounded-r-xl rounded-l-sm overflow-hidden flex flex-col">
-                            {/* Windshield */}
-                            <div className="mx-[4px] mt-[4px] h-[22px] bg-sky-900/80 rounded-tr-lg rounded-sm border border-slate-500">
-                                <div className="absolute top-[5px] right-[7px] w-[14px] h-[1px] bg-sky-300/40"></div>
-                            </div>
-                            {/* Body */}
-                            <div className="flex-1 flex items-end justify-between px-[5px] pb-[3px]">
-                                {/* Headlight */}
-                                <div className={`w-[6px] h-[6px] rounded-full ${isSelected ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'bg-amber-600/60'}`}></div>
-                                {/* Bumper line */}
-                                <div className="w-[16px] h-[3px] bg-slate-500 rounded-full"></div>
-                            </div>
-                        </div>
-                        {/* Wheels under container */}
-                        <div className="absolute -bottom-[8px] left-[16px] flex gap-[6px]">
-                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
-                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
-                        </div>
-                        {/* Wheels under cab */}
-                        <div className="absolute -bottom-[8px] right-[14px]">
-                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
-                        </div>
-                        {/* Shadow */}
-                        <div className="absolute -bottom-[14px] left-0 w-full h-[6px] bg-black/30 blur-md rounded-full"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 
 
@@ -645,7 +578,7 @@ export default function RoutePlanning() {
 
         try {
             const res = await api.post('/api/orders/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': undefined }
             });
             const data = res.data;
             setUploadReport({ success: data.success_list || [], failed: data.failed_list || [] });
@@ -1040,144 +973,29 @@ export default function RoutePlanning() {
             )}
 
             {showVerificationModal && uploadReport && (
-                <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-[#1F1F1F] rounded-2xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col border border-slate-200 dark:border-[#333] overflow-hidden animate-in zoom-in-95">
-                        <div className="p-6 border-b border-slate-200 dark:border-[#333] flex justify-between items-center bg-slate-50 dark:bg-[#111]">
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase">Validasi Pre-Routing VRP</h2>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Harap cek daftar pelanggan, muatan, dan <b className="text-primary">Batas Waktu</b> sebelum memproses rute Bos Ihsan.</p>
-                            </div>
-                            <button onClick={() => setShowVerificationModal(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-[#333] rounded-xl text-slate-500">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 flex-1 overflow-y-auto space-y-8 bg-slate-50 dark:bg-[#1A1A1A]">
-                            <div className="bg-white dark:bg-[#1F1F1F] border border-emerald-200 dark:border-emerald-900/50 rounded-xl overflow-hidden shadow-sm">
-                                <div className="bg-emerald-50 dark:bg-emerald-900/20 px-5 py-3 border-b border-emerald-200 dark:border-emerald-900/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
-                                        <span className="material-symbols-outlined">check_circle</span>
-                                        Toko Siap Routing ({uploadReport.success.length})
-                                    </h3>
-                                </div>
-                                <div className="max-h-[500px] overflow-y-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="sticky top-0 bg-slate-50 dark:bg-[#111] shadow-sm z-10 border-b border-slate-200 dark:border-[#333]">
-                                            <tr className="text-slate-500 dark:text-slate-400">
-                                                <th className="px-5 py-3 font-semibold">No. & Nama Toko</th>
-                                                <th className="px-5 py-3 font-semibold w-32">Total Berat</th>
-                                                <th className="px-5 py-3 font-semibold w-48">Kordinat GPS</th>
-                                                <th className="px-5 py-3 font-semibold w-40 text-center text-primary">Batas Jam (Bisa Edit)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-200 dark:divide-[#333]">
-                                            {uploadReport.success.map((item, idx) => (
-                                                <React.Fragment key={idx}>
-                                                    <tr className="bg-white dark:bg-[#1F1F1F] hover:bg-slate-50 dark:hover:bg-[#2A2A2A] transition-colors">
-                                                        <td className="px-5 py-3">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 font-black text-xs border border-emerald-200 dark:border-emerald-800 shrink-0">
-                                                                    {idx + 1}
-                                                                </span>
-                                                                <div>
-                                                                    <p className="font-bold text-slate-800 dark:text-white">{item.nama_toko}</p>
-                                                                    {item.items && item.items.length > 0 && (
-                                                                        <button onClick={() => toggleRow(idx)} className="text-[10px] font-bold text-primary flex items-center gap-1 mt-1 hover:underline outline-none">
-                                                                            <span className="material-symbols-outlined text-[12px]">{expandedRows.includes(idx) ? 'expand_less' : 'expand_more'}</span>
-                                                                            {expandedRows.includes(idx) ? 'Sembunyikan Rincian' : `Lihat ${item.items.length} Rincian Muatan`}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-5 py-3 text-slate-600 dark:text-slate-300 font-bold">{item.berat} KG</td>
-                                                        <td className="px-5 py-3 font-mono text-xs text-slate-500">{item.kordinat}</td>
-                                                        <td className="px-5 py-3 text-center">
-                                                            <div className="flex justify-center items-center gap-2">
-                                                                <input type="time" defaultValue={item.jam_maks || "20:00"} onChange={(e) => handleTimeChange(item.order_id, e.target.value)} className="border border-slate-300 dark:border-slate-600 dark:bg-[#111] dark:text-white rounded-lg px-2 py-1.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary shadow-sm w-full transition-all" title="Ganti jam kalau ada intervensi manual" />
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                    {expandedRows.includes(idx) && item.items && item.items.length > 0 && (
-                                                        <tr className="bg-slate-50/80 dark:bg-[#1A1A1A] animate-in fade-in slide-in-from-top-2 duration-200">
-                                                            <td colSpan={4} className="px-5 pb-4 pt-3 border-t border-dashed border-slate-200 dark:border-[#333]">
-                                                                <div className="pl-[44px]">
-                                                                    <h5 className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                                                                        <span className="material-symbols-outlined text-[12px]">receipt_long</span> Rincian Item ({item.berat} KG)
-                                                                    </h5>
-                                                                    <ul className="grid grid-cols-2 gap-2">
-                                                                        {item.items.map((product, prodIdx) => (
-                                                                            <li key={prodIdx} className="flex justify-between items-center text-xs bg-white dark:bg-[#222] p-2 rounded-md border border-slate-200 dark:border-[#444] shadow-sm">
-                                                                                <span className="text-slate-600 dark:text-slate-300 font-medium truncate pr-2">{String(product.nama_barang)}</span>
-                                                                                <span className="font-bold text-slate-800 dark:text-white bg-slate-100 dark:bg-[#111] px-2 py-0.5 rounded shrink-0">{String(product.qty)}</span>
-                                                                            </li>
-                                                                        ))}
-                                                                    </ul>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                </React.Fragment>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            {uploadReport.failed.length > 0 && (
-                                <div className="bg-white dark:bg-[#1F1F1F] border border-red-200 dark:border-red-900/50 rounded-xl overflow-hidden shadow-sm mt-4">
-                                    <div className="bg-red-50 dark:bg-red-900/20 px-5 py-3 border-b border-red-200 dark:border-red-900/50 flex justify-between items-center">
-                                        <h3 className="font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
-                                            <span className="material-symbols-outlined">warning</span>
-                                            Error / Tanpa Koordinat ({uploadReport.failed.length})
-                                        </h3>
-                                    </div>
-                                    <div className="max-h-[300px] overflow-y-auto">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="bg-slate-50 dark:bg-[#111] sticky top-0 border-b border-slate-200 dark:border-[#333]">
-                                                <tr className="text-slate-500 dark:text-slate-400">
-                                                    <th className="px-5 py-3 font-bold">Nama Toko</th>
-                                                    <th className="px-5 py-3 font-bold">Keterangan Error</th>
-                                                    <th className="px-5 py-3 font-bold text-center w-80">Aksi (Input Koordinat)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-[#222]">
-                                                {uploadReport.failed.map((item, idx) => (
-                                                    <tr key={idx} className="hover:bg-red-50/30 dark:hover:bg-red-900/10">
-                                                        <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200">{item.nama_toko}</td>
-                                                        <td className="px-5 py-3 text-red-600 dark:text-red-400 font-medium text-xs">{item.alasan}</td>
-                                                        <td className="px-5 py-3">
-                                                            <div className="flex flex-col sm:flex-row gap-2">
-                                                                <div className="flex bg-slate-50 dark:bg-[#111] border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all">
-                                                                    <span className="bg-slate-100 dark:bg-[#222] text-slate-500 px-2 py-2 text-xs font-bold border-r border-slate-300 dark:border-slate-600 flex items-center">LAT</span>
-                                                                    <input type="text" placeholder="-6.207" className="w-24 text-sm bg-transparent text-slate-800 dark:text-white px-2 py-2 outline-none" onChange={(e) => setFailedCoords({ ...failedCoords, [idx]: { ...failedCoords[idx], lat: e.target.value } })} />
-                                                                </div>
-                                                                <div className="flex bg-slate-50 dark:bg-[#111] border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all">
-                                                                    <span className="bg-slate-100 dark:bg-[#222] text-slate-500 px-2 py-2 text-xs font-bold border-r border-slate-300 dark:border-slate-600 flex items-center">LON</span>
-                                                                    <input type="text" placeholder="106.816" className="w-24 text-sm bg-transparent text-slate-800 dark:text-white px-2 py-2 outline-none" onChange={(e) => setFailedCoords({ ...failedCoords, [idx]: { ...failedCoords[idx], lon: e.target.value } })} />
-                                                                </div>
-                                                                <button onClick={() => handleSaveCoordinate(idx, item)} className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg hover:brightness-110 shadow-md shadow-primary/20 transition-all flex items-center gap-1">
-                                                                    <span className="material-symbols-outlined text-[14px]">save</span> SAVE
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-[#333] flex justify-end gap-4 bg-white dark:bg-[#111]">
-                            <button onClick={() => setShowVerificationModal(false)} className="px-6 py-3 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#222] rounded-xl transition-all">
-                                Batal & Edit Excel
-                            </button>
-                            <button onClick={handleOptimizeRoute} className="px-8 py-3 font-black text-white bg-primary hover:brightness-110 rounded-xl shadow-xl shadow-primary/30 flex items-center gap-2 transition-all">
-                                <span className="material-symbols-outlined">rocket_launch</span>
-                                GAS PREVIEW RUTE AI SEKARANG!
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <UploadVerificationModal
+                    uploadReport={uploadReport as any}
+                    onClose={() => setShowVerificationModal(false)}
+                    onUpdateTime={handleTimeChange}
+                    onUpdateWeight={async (id, w) => { await api.put(`/api/orders/${id}/weight`, { weight: w }).catch(console.error); }}
+                    onUpdateSuccessCoord={async (id, lat, lon) => { 
+                        await api.put(`/api/orders/${id}/coordinate`, { latitude: lat, longitude: lon }).catch(console.error);
+                    }}
+                    onSaveCoord={async (idx, code, name, lat, lon) => { 
+                        // Simulate setting failed coords state since it's handled inside the modal or we can adapt
+                        // We will just call the API directly here to simplify for the imported modal
+                        try {
+                            const payload = { latitude: lat, longitude: lon, kode_customer: code, nama_customer: name };
+                            await api.put(`/api/orders/DRAFT-${idx}/coordinate`, payload);
+                            return true;
+                        } catch (error) {
+                            console.error(error);
+                            alert("Gagal save koordinat");
+                            return false;
+                        }
+                    }}
+                    onOptimize={handleOptimizeRoute}
+                />
             )}
 
             {activeModal && (
@@ -1317,38 +1135,12 @@ export default function RoutePlanning() {
                             <div className="flex items-center justify-between">
                                 <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined text-slate-400">local_shipping</span> Today's Fleet</h3>
                             </div>
-                            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-10">
-                                {displayRoutes.length > 0 ? (
-                                    displayRoutes.map((route) => {
-                                        const maxCap = route.capacity || 2000;
-                                        const loadPercent = Math.min(Math.round((route.total_berat / maxCap) * 100), 100);
-                                        const colors = { hex: '#16a34a', class: 'emerald', text: 'GOOD' };
-                                        if (loadPercent > 90) { colors.hex = '#e11d48'; colors.class = 'rose'; colors.text = 'CRITICAL'; }
-                                        else if (loadPercent > 70) { colors.hex = '#d97706'; colors.class = 'amber'; colors.text = 'OPTIMAL'; }
-                                        return (
-                                            <Truck3D
-                                                key={route.route_id}
-                                                plateNumber={route.kendaraan}
-                                                driverName={route.driver_name}
-                                                truckType={route.jenis}
-                                                zone={route.zone}
-                                                colorHex={colors.hex}
-                                                percent={loadPercent}
-                                                outerText={colors.text}
-                                                loadKg={`${route.total_berat} / ${maxCap} Kg`}
-                                                colorClass={colors.class}
-                                                isSelected={selectedRouteId === route.route_id}
-                                                onClick={() => { setSelectedRouteId(route.route_id); setExpandedStopIdx(null); }}
-                                            />
-                                        );
-                                    })
-                                ) : (
-                                    <div className="p-10 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-300 dark:border-[#333] rounded-2xl text-slate-500">
-                                        <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">manage_search</span>
-                                        <p className="font-bold">Belum ada rute.</p>
-                                    </div>
-                                )}
-                            </div>
+                            <TruckList 
+                                routesData={displayRoutes as any} 
+                                selectedRouteId={selectedRouteId} 
+                                onSelectRoute={(id) => { setSelectedRouteId(id); setExpandedStopIdx(null); }}
+                                trafficWarnings={trafficWarnings as any}
+                            />
                         </div>
                     )}
 

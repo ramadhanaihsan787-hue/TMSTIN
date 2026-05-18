@@ -113,28 +113,35 @@ export default function TruckList({ routesData, selectedRouteId, onSelectRoute, 
         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-10">
             {routesData.length > 0 ? (
                 routesData.map((route) => {
-                    const maxCap = 2000;
-                    const loadPercent = Math.min(Math.round((route.totalWeight / maxCap) * 100), 100);
+                    const routeId = route.routeId || (route as any).route_id;
+                    const vehicle = route.vehicle || (route as any).kendaraan;
+                    const driverName = route.driverName || (route as any).driver_name;
+                    const vehicleType = route.vehicleType || (route as any).jenis;
+                    const zone = route.zone;
+                    const totalWeight = route.totalWeight || (route as any).total_berat || 0;
+
+                    const maxCap = (route as any).capacity || 2000;
+                    const loadPercent = Math.min(Math.round((totalWeight / maxCap) * 100), 100);
                     const colors = getTruckColors(loadPercent);
                     
                     // 🌟 Hitung total warning buat truk ini
-                    const routeWarnings = trafficWarnings.filter(w => w.truck_id === route.routeId);
+                    const routeWarnings = trafficWarnings.filter(w => w.truck_id === routeId);
                     const criticalWarnings = routeWarnings.filter(w => w.severity === 'HIGH');
                     
                     return (
                         <Truck3D
-                            key={route.routeId}
-                            plateNumber={route.vehicle}
-                            driverName={route.driverName}
-                            truckType={route.vehicleType}
-                            zone={route.zone}
+                            key={routeId}
+                            plateNumber={vehicle}
+                            driverName={driverName}
+                            truckType={vehicleType}
+                            zone={zone}
                             colorHex={colors.hex}
                             percent={loadPercent}
                             outerText={colors.text}
-                            loadKg={`${route.totalWeight} / ${maxCap} Kg`}
+                            loadKg={`${totalWeight} / ${maxCap} Kg`}
                             colorClass={colors.class}
-                            isSelected={selectedRouteId === route.routeId}
-                            onClick={() => onSelectRoute(route.routeId)}
+                            isSelected={selectedRouteId === routeId}
+                            onClick={() => onSelectRoute(routeId)}
                             warningCount={routeWarnings.length}
                             criticalCount={criticalWarnings.length}
                         />
