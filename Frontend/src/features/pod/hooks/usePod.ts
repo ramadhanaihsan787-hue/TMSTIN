@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { podService, type DeliveryOrder } from '../services/podService';
+import { podService, type PodRecord } from '../services/podService';
 
 export const usePod = () => {
     // 🌟 UBAH: order_id dari backend itu String (misal "DO-123"), bukan Number!
@@ -7,7 +7,7 @@ export const usePod = () => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // 🌟 STATE BARU BUAT NYIMPEN DATA DARI DATABASE
-    const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+    const [orders, setOrders] = useState<PodRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +16,7 @@ export const usePod = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await podService.getOrders(statusFilter);
+            const response = await podService.getPodVerifications();
             setOrders(response.data); // 🌟 Masukin data asli ke dalam state React!
         } catch (err: any) {
             console.error("Gagal menarik data DO:", err);

@@ -3,206 +3,231 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import Map, { Marker, Popup, Source, Layer } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import type { TrafficWarning } from "../types"; // 🌟 FIX TS: Tambahin kata 'type' di sini!
+import {
+    DEPO_LON, DEPO_LAT, generateCircleCoords,
+    zonePolygons, buildZonesGeoJSON
+} from '../../dashboard/components/trackingData';
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-const DEPO_LON = 106.479163;
-const DEPO_LAT = -6.207356;
-
-// ==========================================
-// 1. STYLING ANIMASI (MAPBOX VERSION)
-// ==========================================
-const css = `
-    @keyframes markerBlink { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 transparent; } 50% { transform: scale(1.15); box-shadow: 0 0 15px currentColor; } }
+const globalStyles = `
+    @keyframes markerBlink { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); } 50% { transform: scale(1.2); box-shadow: 0 0 20px currentColor; } }
+    @keyframes polylineBlink { 0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px currentColor); } 50% { opacity: 0.3; filter: none; } }
+    @keyframes routePulse { 0%,100% { opacity:0.7; } 50% { opacity:1; } }
+    @keyframes depoSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+    @keyframes customerBounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
     .blinking-marker { animation: markerBlink 1s ease-in-out infinite; z-index: 9999 !important; position: relative; }
-    
-    @keyframes dangerPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-    .danger-marker { animation: dangerPulse 1.5s infinite; border: 2px solid white !important; }
-    
-    .dimmed-marker { opacity: 0.3; filter: grayscale(80%); }
-    .depo-ring { position: absolute; inset: -6px; border-radius: 50%; border: 2px dashed rgba(239,68,68,0.5); animation: depoSpin 10s linear infinite; }
-    @keyframes depoSpin { 100% { transform: rotate(360deg); } }
+    .blinking-polyline { animation: polylineBlink 1s ease-in-out infinite; }
+    .dropped-marker { background-color: #334155; border: 2px solid #94a3b8; filter: grayscale(100%); }
+    .rp-depo-ring { animation: depoSpin 8s linear infinite; }
+    .rp-customer-pin:hover { animation: customerBounce 0.4s ease; }
+    .rp-zone-toggle { backdrop-filter: blur(10px); transition: all 0.2s ease; }
+    .rp-zone-toggle:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .mapboxgl-popup-content { background: #111827 !important; border: 1px solid #374151 !important; border-radius: 12px !important; color: white !important; padding: 0 !important; box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important; }
+    .mapboxgl-popup-tip { border-top-color: #111827 !important; }
+    .mapboxgl-popup-close-button { color: #9ca3af !important; font-size: 18px !important; padding: 4px 8px !important; }
 `;
 
-// ==========================================
-// 2. BIKIN LINGKARAN GEOFENCE 2KM (NO LIBRARY)
-// ==========================================
-const createGeoJSONCircle = (center: [number, number], radiusInMeters: number, points = 64) => {
-    const coords = [];
-    const km = radiusInMeters / 1000;
-    const distanceX = km / (111.320 * Math.cos(center[1] * Math.PI / 180));
-    const distanceY = km / 110.574;
-
-    for (let i = 0; i < points; i++) {
-        const theta = (i / points) * (2 * Math.PI);
-        const x = distanceX * Math.cos(theta);
-        const y = distanceY * Math.sin(theta);
-        coords.push([center[0] + x, center[1] + y]);
+const createNumberedIcon = (number: number | string, colorHex: string, isDepo: boolean = false, isDimmed: boolean = false, isBlinking: boolean = false) => {
+    if (isDepo) {
+        return (
+            <div style={{ position: 'relative', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg className="rp-depo-ring" width="48" height="48" viewBox="0 0 48 48" style={{ position: 'absolute' }}>
+                    <circle cx="24" cy="24" r="22" fill="none" stroke="#e11d48" strokeWidth="2" strokeDasharray="6 4" opacity="0.6" />
+                </svg>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #1e293b, #334155)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #e11d48', boxShadow: '0 0 20px rgba(225,29,72,0.4)', zIndex: 1 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f43f5e' }}>warehouse</span>
+                </div>
+            </div>
+        );
     }
-    coords.push(coords[0]); 
-    
-    return {
-        type: 'FeatureCollection',
-        features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} }]
-    };
+
+    const size = 28;
+    const bgColor = isDimmed ? '#4b5563' : colorHex;
+    const opacity = isDimmed ? 0.35 : 1;
+
+    return (
+        <div className={`rp-customer-pin ${isBlinking ? 'blinking-marker' : ''}`} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity, transition: 'all 0.3s ease', cursor: 'pointer' }}>
+            {!isDimmed && (
+                <div style={{ position: 'absolute', top: 2, width: size + 8, height: size + 8, borderRadius: '50%', background: colorHex, opacity: 0.25, filter: 'blur(6px)' }} />
+            )}
+            <div style={{ width: size, height: size, borderRadius: '50%', background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 12, border: '2px solid rgba(255,255,255,0.9)', boxShadow: `0 2px 10px ${bgColor}60`, zIndex: 1, position: 'relative' }}>
+                {number}
+            </div>
+            <div style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `6px solid ${bgColor}`, marginTop: -1, zIndex: 0 }} />
+        </div>
+    );
 };
 
-interface RouteMapProps {
-    routesData: any[]; 
+interface MapComponentProps {
+    routesData: any[];
     selectedRouteId: string | null;
     truckColors: string[];
-    // 🌟 FIX TS: Hapus variabel droppedNodesData yang ngga kepake atau dibiarin tapi ga usah dipanggil
-    droppedNodesData?: any[]; 
-    trafficWarnings?: TrafficWarning[]; 
-    onSelectRoute?: (routeId: string | null) => void;
+    droppedNodesData?: any[];
+    hasDummyData?: boolean;
 }
 
-// ... (Isi ke bawahnya sama persis kayak yang lu kirim tadi, ngga ada yang diubah) ...
-export default function RouteMap({ routesData, selectedRouteId, truckColors = [], droppedNodesData = [], trafficWarnings = [], onSelectRoute }: RouteMapProps) {
+export default function RouteMap({ routesData, selectedRouteId, truckColors, droppedNodesData, hasDummyData }: MapComponentProps) {
     const mapRef = useRef<MapRef>(null);
     const [viewState, setViewState] = useState({ longitude: DEPO_LON, latitude: DEPO_LAT, zoom: 10 });
     const [popupInfo, setPopupInfo] = useState<any>(null);
+    const [showZones, setShowZones] = useState(true);
+    const [showRadius, setShowRadius] = useState(true);
+
+    // 🌟 FORCE RESIZE ON MOUNT (Fixes blank map issue)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (mapRef.current) {
+                mapRef.current.getMap().resize();
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, []);
 
     useEffect(() => {
-        if (selectedRouteId && mapRef.current) {
-            const selected = routesData.find(r => (r.routeId || r.route_id) === selectedRouteId);
-            if (selected) {
-                const details = selected.details || selected.detail_rute || selected.detail_perjalanan || [];
-                const firstStop = details.find((d: any) => {
-                    const lat = parseFloat(d.latitude || d.lat);
-                    const lon = parseFloat(d.longitude || d.lon);
-                    return !isNaN(lat) && !isNaN(lon); 
-                });
-                if (firstStop) {
-                    mapRef.current.flyTo({ 
-                        center: [parseFloat(firstStop.longitude || firstStop.lon), parseFloat(firstStop.latitude || firstStop.lat)], 
-                        zoom: 11, duration: 1500 
-                    });
-                }
-            }
+        if (mapRef.current) {
+            mapRef.current.getMap().resize();
         }
-    }, [selectedRouteId, routesData]);
+    }, [routesData, selectedRouteId]);
 
-    const routesGeoJSON = useMemo(() => {
-        const features = routesData.map((route, i) => {
-            const routeId = route.routeId || route.route_id;
-            const color = truckColors[i % truckColors.length];
-            const isDimmed = selectedRouteId !== null && selectedRouteId !== routeId;
-            const isBlinking = selectedRouteId === routeId;
-
-            let coords: number[][] = [];
-            
-            if (route.garis_aspal && route.garis_aspal.coordinates && route.garis_aspal.coordinates.length > 0) {
-                coords = route.garis_aspal.coordinates.filter((c: any) => !isNaN(c[0]) && !isNaN(c[1])); 
-            } else if (route.polyline && route.polyline.length > 0) {
-                coords = route.polyline.filter((p: any) => !isNaN(p[0]) && !isNaN(p[1])).map((p: any) => [p[1], p[0]]);
+    // GeoJSON for all route polylines
+    const routeGeoJSON = useMemo(() => ({
+        type: 'FeatureCollection' as const,
+        features: routesData.map((route, i) => {
+            const coords: [number, number][] = [[DEPO_LON, DEPO_LAT]];
+            if (route.garis_aspal && route.garis_aspal.length > 0) {
+                route.garis_aspal.forEach((p: any) => coords.push([p[1], p[0]]));
             } else {
-                coords = [[DEPO_LON, DEPO_LAT]];
-                const details = route.details || route.detail_rute || route.detail_perjalanan || [];
-                details.forEach((stop: any) => {
-                    const lat = parseFloat(stop.latitude || stop.lat);
-                    const lon = parseFloat(stop.longitude || stop.lon);
-                    if (!isNaN(lat) && !isNaN(lon)) coords.push([lon, lat]);
+                const stops = route.detail_rute || route.detail_perjalanan || [];
+                stops.forEach((stop: any) => {
+                    const lat = stop.latitude || stop.lat;
+                    const lon = stop.longitude || stop.lon;
+                    if (lat && lon) coords.push([lon, lat]);
                 });
             }
-
-            if (coords.length < 2) coords = [[DEPO_LON, DEPO_LAT], [DEPO_LON, DEPO_LAT]];
-
+            const isDimmed = selectedRouteId !== null && selectedRouteId !== route.route_id;
             return {
-                type: 'Feature',
-                properties: { 
-                    routeId, color, 
-                    opacity: isDimmed ? 0.2 : 1.0, 
-                    width: isBlinking ? 6 : 4,
-                    glowOpacity: isDimmed ? 0 : (isBlinking ? 0.5 : 0.2)
+                type: 'Feature' as const,
+                properties: {
+                    color: truckColors[i % truckColors.length],
+                    opacity: isDimmed ? 0.12 : 0.85,
+                    width: selectedRouteId === route.route_id ? 5 : 3
                 },
-                geometry: { type: 'LineString', coordinates: coords }
+                geometry: { type: 'LineString' as const, coordinates: coords }
             };
-        });
+        })
+    }), [routesData, selectedRouteId, truckColors]);
 
-        return { type: 'FeatureCollection', features };
-    }, [routesData, selectedRouteId, truckColors]);
+    // GeoJSON for geofence circles
+    const geofenceGeoJSON = useMemo(() => ({
+        type: 'FeatureCollection' as const,
+        features: [
+            {
+                type: 'Feature' as const,
+                properties: { color: '#e11d48', opacity: 0.06, strokeOpacity: 0.3 },
+                geometry: { type: 'Polygon' as const, coordinates: [generateCircleCoords(DEPO_LON, DEPO_LAT, 5)] }
+            },
+            ...routesData.flatMap((route, i) => {
+                const stops = route.detail_rute || route.detail_perjalanan || [];
+                return stops.filter((s: any) => (s.latitude || s.lat) && (s.longitude || s.lon)).map((stop: any) => {
+                    const lat = stop.latitude || stop.lat;
+                    const lon = stop.longitude || stop.lon;
+                    return {
+                        type: 'Feature' as const,
+                        properties: {
+                            color: truckColors[i % truckColors.length],
+                            opacity: selectedRouteId && selectedRouteId !== route.route_id ? 0.01 : 0.06,
+                            strokeOpacity: selectedRouteId && selectedRouteId !== route.route_id ? 0.05 : 0.35
+                        },
+                        geometry: { type: 'Polygon' as const, coordinates: [generateCircleCoords(lon, lat, 1.5)] }
+                    };
+                });
+            })
+        ]
+    }), [routesData, selectedRouteId, truckColors]);
 
-    const geofenceGeoJSON = useMemo(() => createGeoJSONCircle([DEPO_LON, DEPO_LAT], 2000), []);
+    const zonesGeoJSON = useMemo(() => buildZonesGeoJSON(), []);
 
-    const warningsMap = useMemo(() => {
-        const map: any = {};
-        trafficWarnings.forEach(w => {
-            map[`${w.truck_id}_${w.store_name}`] = w;
-        });
-        return map;
-    }, [trafficWarnings]);
+    const handleReset = () => {
+        setViewState({ longitude: DEPO_LON, latitude: DEPO_LAT, zoom: 10 });
+        setPopupInfo(null);
+    };
 
     return (
-        <div className="relative w-full h-full min-h-[500px]">
-            <style>{css}</style>
-            
-            <Map 
-                ref={mapRef} 
-                {...viewState} 
-                onMove={(e: any) => setViewState(e.viewState)} 
-                style={{ width: '100%', height: '100%' }} 
-                mapStyle="mapbox://styles/mapbox/dark-v11" 
-                mapboxAccessToken={MAPBOX_TOKEN}
+        <div className="relative w-full h-full rounded-xl overflow-hidden bg-slate-900">
+            <style>{globalStyles}</style>
+            <Map
+                ref={mapRef}
+                {...viewState}
+                onMove={evt => setViewState(evt.viewState)}
+                style={{ width: '100%', height: '100%' }}
+                mapStyle="mapbox://styles/mapbox/dark-v11"
+                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                onLoad={() => console.log("✅ Mapbox Loaded Successfully")}
+                onError={(e) => console.error("❌ Mapbox Error:", e.error)}
             >
-                <Source id="geofence" type="geojson" data={geofenceGeoJSON as any}>
-                    <Layer id="geo-fill" type="fill" paint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.05 }} />
-                    <Layer id="geo-line" type="line" paint={{ 'line-color': '#ef4444', 'line-width': 1.5, 'line-dasharray': [4, 4], 'line-opacity': 0.5 }} />
+                {/* Zone Polygons */}
+                {showZones && (
+                    <Source id="rp-zones" type="geojson" data={zonesGeoJSON}>
+                        <Layer id="rp-zones-fill" type="fill" paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.1 }} />
+                        <Layer id="rp-zones-line" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 2, 'line-dasharray': [4, 3], 'line-opacity': 0.6 }} />
+                    </Source>
+                )}
+
+                {/* Geofence Radius Circles */}
+                {showRadius && (
+                    <Source id="rp-geofences" type="geojson" data={geofenceGeoJSON}>
+                        <Layer id="rp-geo-fill" type="fill" paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': ['get', 'opacity'] }} />
+                        <Layer id="rp-geo-line" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 1.5, 'line-dasharray': [3, 2], 'line-opacity': ['get', 'strokeOpacity'] }} />
+                    </Source>
+                )}
+
+                {/* Route Polylines with Glow */}
+                <Source id="rp-routes" type="geojson" data={routeGeoJSON}>
+                    <Layer id="rp-routes-glow" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 12, 'line-opacity': 0.15, 'line-blur': 6 }} />
+                    <Layer id="rp-routes-main" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 2] }} />
                 </Source>
 
-                <Source id="routes-glow" type="geojson" data={routesGeoJSON as any}>
-                    <Layer id="route-glow-layer" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 12, 'line-opacity': ['get', 'glowOpacity'], 'line-blur': 6 }} />
-                </Source>
-                <Source id="routes" type="geojson" data={routesGeoJSON as any}>
-                    <Layer id="route-main-layer" type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 2] }} />
-                </Source>
+                {/* Zone Labels */}
+                {showZones && zonePolygons.map((z: typeof zonePolygons[0]) => {
+                    const cX = z.coordinates.reduce((s: number, c: [number, number]) => s + c[0], 0) / z.coordinates.length;
+                    const cY = z.coordinates.reduce((s: number, c: [number, number]) => s + c[1], 0) / z.coordinates.length;
+                    return (
+                        <Marker key={z.name} longitude={cX} latitude={cY} anchor="center">
+                            <div style={{ background: `${z.color}22`, border: `1px solid ${z.color}66`, borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 800, color: z.color, textTransform: 'uppercase', letterSpacing: 1, whiteSpace: 'nowrap' }}>{z.name}</div>
+                        </Marker>
+                    );
+                })}
 
+                {/* Depot Marker */}
                 <Marker longitude={DEPO_LON} latitude={DEPO_LAT} anchor="center" onClick={() => setPopupInfo({ type: 'depo' })}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', border: '3px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 16, boxShadow: '0 4px 15px rgba(239,68,68,0.5)', cursor: 'pointer', position: 'relative' }}>
-                        D<div className="depo-ring"></div>
-                    </div>
+                    {createNumberedIcon('0', '#1e293b', true, false, false)}
                 </Marker>
 
+                {/* Route Stop Markers */}
                 {routesData.map((route, i) => {
-                    const baseColor = truckColors[i % truckColors.length];
-                    const routeId = route.routeId || route.route_id;
-                    const vehicle = route.vehicle || route.kendaraan || route.armada || "-";
-                    const detailsArray = route.details || route.detail_rute || route.detail_perjalanan || [];
-                    
-                    const isDimmed = selectedRouteId !== null && selectedRouteId !== routeId;
-                    const isBlinking = selectedRouteId === routeId;
+                    const color = truckColors[i % truckColors.length];
+                    const isDimmed = selectedRouteId !== null && selectedRouteId !== route.route_id;
+                    const isBlinking = selectedRouteId === route.route_id;
+                    const stops = route.detail_rute || route.detail_perjalanan || [];
 
                     return (
-                        <React.Fragment key={routeId}>
-                            {detailsArray.map((stop: any, j: number) => {
-                                const lat = parseFloat(stop.latitude || stop.lat);
-                                const lon = parseFloat(stop.longitude || stop.lon);
-                                const namaToko = stop.storeName || stop.nama_toko || stop.lokasi;
-                                const beratKg = stop.weightKg || stop.berat_kg || stop.turun_barang_kg || 0;
-                                const urutan = stop.sequence || stop.urutan || (j + 1);
-
-                                if (isNaN(lat) || isNaN(lon) || namaToko?.includes("GUDANG JAPFA")) return null;
-
-                                const warning = warningsMap[`${routeId}_${namaToko}`];
-                                let markerColor = baseColor;
-                                let isDanger = false;
-
-                                if (warning) {
-                                    if (warning.severity === 'HIGH') {
-                                        markerColor = '#ef4444'; 
-                                        isDanger = true;
-                                    } else {
-                                        markerColor = '#f59e0b'; 
-                                    }
-                                }
-
+                        <React.Fragment key={route.route_id}>
+                            {stops.map((stop: any, j: number) => {
+                                const lat = stop.latitude || stop.lat;
+                                const lon = stop.longitude || stop.lon;
+                                const urutan = stop.urutan || (j + 1);
+                                if (!lat || !lon) return null;
                                 return (
-                                    <Marker key={`${routeId}-${j}`} longitude={lon} latitude={lat} anchor="center" onClick={(e) => { e.originalEvent.stopPropagation(); setPopupInfo({ type: 'customer', stop, markerColor, vehicle, urutan, beratKg, warning }); }}>
-                                        <div style={{ color: markerColor }} className={`${isBlinking ? 'blinking-marker' : ''} ${isDimmed ? 'dimmed-marker' : ''} ${isDanger ? 'danger-marker' : ''} cursor-pointer`}>
-                                            <div style={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: isDimmed ? '#334155' : markerColor, border: `2px solid ${isDimmed ? '#64748b' : 'white'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, fontWeight: 900, boxShadow: isDimmed ? 'none' : '0 2px 8px rgba(0,0,0,0.5)' }}>
-                                                {urutan}
-                                            </div>
-                                        </div>
+                                    <Marker
+                                        key={`${route.route_id}-${j}`}
+                                        longitude={lon}
+                                        latitude={lat}
+                                        anchor="bottom"
+                                        onClick={(e) => {
+                                            e.originalEvent.stopPropagation();
+                                            setPopupInfo({ type: 'stop', data: stop, routeColor: color, routeKendaraan: route.kendaraan, routeDriver: route.driver_name });
+                                        }}
+                                    >
+                                        {createNumberedIcon(urutan, color, false, isDimmed, isBlinking)}
                                     </Marker>
                                 );
                             })}
@@ -210,62 +235,137 @@ export default function RouteMap({ routesData, selectedRouteId, truckColors = []
                     );
                 })}
 
-                {popupInfo && popupInfo.type === 'depo' && (
-                    <Popup longitude={DEPO_LON} latitude={DEPO_LAT} onClose={() => setPopupInfo(null)} closeOnClick={false} anchor="bottom" className="custom-popup z-[9999]">
-                        <div className="p-2 min-w-[200px]">
-                            <div className="flex items-center gap-2 mb-2"><span className="text-xl">🏢</span><b className="text-base text-slate-800 uppercase">Depo Japfa Cikupa</b></div>
-                            <div className="text-xs text-slate-500 space-y-1">
-                                <div className="flex justify-between"><span>Status</span><b className="text-emerald-600">Operational</b></div>
-                                <div className="flex justify-between"><span>Geofence Radius</span><b className="text-slate-800">2 KM</b></div>
-                            </div>
-                        </div>
-                    </Popup>
-                )}
-                
-                {popupInfo && popupInfo.type === 'customer' && (
-                    <Popup longitude={parseFloat(popupInfo.stop.longitude || popupInfo.stop.lon)} latitude={parseFloat(popupInfo.stop.latitude || popupInfo.stop.lat)} onClose={() => setPopupInfo(null)} closeOnClick={false} anchor="bottom" className="custom-popup z-[9999]">
-                        <div className="p-1 space-y-2 min-w-[200px]">
-                            <div className="flex justify-between items-center border-b pb-1 mb-1">
-                                <b style={{ color: popupInfo.markerColor }} className="text-sm uppercase truncate pr-2">🚚 {popupInfo.vehicle}</b>
-                                <span style={{ backgroundColor: popupInfo.markerColor }} className="text-white font-black text-lg px-2.5 py-0.5 rounded-full shadow">{popupInfo.urutan}</span>
-                            </div>
-                            <b className="text-sm font-bold text-slate-800">{popupInfo.stop.storeName || popupInfo.stop.nama_toko}</b>
-                            
-                            <div className="text-xs text-slate-600 flex justify-between"><span className="font-medium text-slate-400">Muatan:</span> <b className="text-slate-900 font-bold">{popupInfo.beratKg} KG</b></div>
-                            <div className="text-xs text-slate-600 flex justify-between"><span className="font-medium text-slate-400">Est. Tiba:</span> <b className="text-slate-900 font-bold">{popupInfo.warning?.real_eta_traffic || popupInfo.stop.arrivalTime || popupInfo.stop.jam_tiba || '-'}</b></div>
-                            
-                            {popupInfo.warning && (
-                                <div className={`mt-2 p-1.5 rounded-md text-[10px] font-bold ${popupInfo.warning.severity === 'HIGH' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
-                                    ⚠️ Potensi Telat {popupInfo.warning.delay_minutes} Menit (Macet)
+                {/* Dropped Nodes Markers (Failed Shops) */}
+                {droppedNodesData?.map((node, i) => {
+                    const lat = node.lat || node.latitude;
+                    const lon = node.lon || node.longitude;
+                    if (!lat || !lon) return null;
+                    return (
+                        <Marker
+                            key={`dropped-${i}`}
+                            longitude={lon}
+                            latitude={lat}
+                            anchor="bottom"
+                            onClick={(e) => {
+                                e.originalEvent.stopPropagation();
+                                setPopupInfo({ type: 'stop', data: { ...node, latitude: lat, longitude: lon, urutan: '!' }, routeColor: '#f43f5e', routeKendaraan: 'UNASSIGNED', routeDriver: node.alasan });
+                            }}
+                        >
+                            <div className="flex flex-col items-center group cursor-pointer">
+                                <div className="bg-white dark:bg-slate-900 px-2 py-1 rounded-md shadow-lg border-2 border-rose-500 mb-1 scale-75 group-hover:scale-100 transition-transform">
+                                    <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 whitespace-nowrap uppercase tracking-tighter">GAGAL AI</span>
                                 </div>
-                            )}
-                        </div>
+                                <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center border-4 border-white shadow-xl animate-pulse">
+                                    <span className="material-symbols-outlined text-white text-lg">warning</span>
+                                </div>
+                            </div>
+                        </Marker>
+                    );
+                })}
+
+                {/* Simulated Moving Trucks */}
+                {routesData.map((route, i) => {
+                    const stops = (route.detail_rute || route.detail_perjalanan || []).filter((s: any) => (s.latitude || s.lat) && (s.longitude || s.lon));
+                    if (stops.length < 2) return null;
+
+                    const truckPosIdx = Math.min(1, stops.length - 1);
+                    const truckStop = stops[truckPosIdx];
+                    const lat = truckStop.latitude || truckStop.lat;
+                    const lon = truckStop.longitude || truckStop.lon;
+                    const color = truckColors[i % truckColors.length];
+                    const isSelected = selectedRouteId === route.route_id;
+
+                    return (
+                        <Marker
+                            key={`truck-pos-${route.route_id}`}
+                            longitude={lon}
+                            latitude={lat}
+                            anchor="center"
+                        >
+                            <div className={`relative transition-all duration-1000 ${isSelected ? 'scale-125 z-50' : 'z-40 scale-100'}`}>
+                                <div className="absolute -inset-4 bg-white/20 dark:bg-black/20 blur-xl rounded-full animate-pulse"></div>
+                                <div className="relative bg-white dark:bg-slate-800 p-1.5 rounded-full shadow-[0_0_20px_rgba(0,0,0,0.3)] border-2" style={{ borderColor: color }}>
+                                    <div className="w-7 h-7 flex items-center justify-center rounded-full" style={{ backgroundColor: color }}>
+                                        <span className="material-symbols-outlined text-white text-sm">local_shipping</span>
+                                    </div>
+                                    <div className="absolute left-1/2 -bottom-8 -translate-x-1/2 bg-slate-900/90 text-white text-[8px] font-black px-2 py-0.5 rounded-full whitespace-nowrap border border-white/20 shadow-lg uppercase tracking-widest">
+                                        LIVE • {route.kendaraan}
+                                    </div>
+                                </div>
+                            </div>
+                        </Marker>
+                    );
+                })}
+
+                {/* Rich Popups */}
+                {popupInfo && (
+                    <Popup
+                        longitude={popupInfo.type === 'depo' ? DEPO_LON : (popupInfo.data.longitude || popupInfo.data.lon)}
+                        latitude={popupInfo.type === 'depo' ? DEPO_LAT : (popupInfo.data.latitude || popupInfo.data.lat)}
+                        onClose={() => setPopupInfo(null)}
+                        closeOnClick={false}
+                        anchor="bottom"
+                        maxWidth="300px"
+                    >
+                        {popupInfo.type === 'depo' ? (
+                            <div style={{ padding: 16 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 24, color: '#f43f5e' }}>warehouse</span>
+                                    <div>
+                                        <div style={{ fontWeight: 900, fontSize: 14, color: '#fff', textTransform: 'uppercase' }}>Depo JAPFA Cikupa</div>
+                                        <div style={{ fontSize: 11, color: '#9ca3af' }}>Pusat Distribusi Utama</div>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                    <span style={{ background: '#1e293b', border: '1px solid #374151', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#10b981' }}>⏰ Depart 06:00</span>
+                                    <span style={{ background: '#1e293b', border: '1px solid #374151', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#3b82f6' }}>📍 Cikupa, TNG</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ padding: 16, minWidth: 240 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #374151', paddingBottom: 10, marginBottom: 10 }}>
+                                    <div>
+                                        <div style={{ fontWeight: 900, fontSize: 13, color: popupInfo.routeColor, textTransform: 'uppercase' }}>🚚 {popupInfo.routeKendaraan}</div>
+                                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{popupInfo.routeDriver || '-'}</div>
+                                    </div>
+                                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: popupInfo.routeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 16, boxShadow: `0 0 12px ${popupInfo.routeColor}60` }}>{popupInfo.data.urutan}</div>
+                                </div>
+                                <div style={{ fontWeight: 800, fontSize: 13, color: '#fff', marginBottom: 8 }}>{popupInfo.data.nama_toko || popupInfo.data.storeName}</div>
+                                <div style={{ background: '#1e293b', borderRadius: 8, padding: 10, border: '1px solid #374151', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#10b981' }}>route</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Segment Distance</div>
+                                        <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase' }}>Dari stop sebelumnya</div>
+                                    </div>
+                                    <div style={{ fontSize: 22, fontWeight: 900, color: '#10b981' }}>{popupInfo.data.distance_from_prev_km || '0.0'}<span style={{ fontSize: 14 }}> KM</span></div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <span style={{ background: '#1e293b', border: '1px solid #374151', borderRadius: 6, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#f59e0b' }}>📦 {popupInfo.data.berat_kg || popupInfo.data.weightKg} KG</span>
+                                    <span style={{ background: '#1e293b', border: '1px solid #374151', borderRadius: 6, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3b82f6' }}>⏰ {popupInfo.data.jam_tiba?.substring(0, 5) || popupInfo.data.arrivalTime?.substring(0, 5) || '-'}</span>
+                                </div>
+                            </div>
+                        )}
                     </Popup>
                 )}
             </Map>
 
-            {onSelectRoute && routesData.length > 0 && (
-                <div className="absolute bottom-6 right-6 z-[1000] bg-[#111]/90 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-slate-700 max-h-[250px] overflow-y-auto min-w-[200px]">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3 flex items-center justify-between border-b border-slate-700 pb-2">
-                        <span>Rute Aktif</span>
-                        <span className="text-[9px] bg-primary/20 text-primary px-2 py-0.5 rounded">Pilih Manual</span>
-                    </h4>
-                    <div className="space-y-2">
-                        {routesData.map((truk, i) => {
-                            const routeId = truk.routeId || truk.route_id;
-                            const vehicle = truk.vehicle || truk.kendaraan || truk.armada || "-";
-                            const isThisSelected = selectedRouteId === routeId;
-                            const isOtherSelected = selectedRouteId !== null && !isThisSelected;
-                            return (
-                                <div key={i} onClick={() => onSelectRoute(isThisSelected ? null : routeId)} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all select-none ${isThisSelected ? 'bg-slate-800 border border-primary scale-105' : 'hover:bg-slate-800'} ${isOtherSelected ? 'opacity-40 grayscale' : ''}`}>
-                                    <div className={`w-4 h-4 rounded-full shadow-inner border border-[#111] ${isThisSelected ? 'animate-pulse' : ''}`} style={{ backgroundColor: truckColors[i % truckColors.length] }}></div>
-                                    <span className="text-xs font-bold text-slate-200">{vehicle}</span>
-                                </div>
-                            )
-                        })}
+            {/* Toggle Controls - Top Right */}
+            <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, display: 'flex', gap: 6 }}>
+                {hasDummyData && (
+                    <div className="rp-zone-toggle" style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 8, padding: '4px 10px', fontSize: 10, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        ⚠ DEMO DATA
                     </div>
-                </div>
-            )}
+                )}
+                <button onClick={() => setShowZones(!showZones)} className="rp-zone-toggle" style={{ background: showZones ? 'rgba(59,130,246,0.2)' : 'rgba(0,0,0,0.5)', border: showZones ? '1px solid #3b82f6' : '1px solid #4b5563', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: showZones ? '#60a5fa' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>layers</span> Zones
+                </button>
+                <button onClick={() => setShowRadius(!showRadius)} className="rp-zone-toggle" style={{ background: showRadius ? 'rgba(16,185,129,0.2)' : 'rgba(0,0,0,0.5)', border: showRadius ? '1px solid #10b981' : '1px solid #4b5563', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: showRadius ? '#34d399' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>track_changes</span> Radius
+                </button>
+                <button onClick={handleReset} className="rp-zone-toggle" style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid #4b5563', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>fit_screen</span> Reset
+                </button>
+            </div>
         </div>
     );
 }

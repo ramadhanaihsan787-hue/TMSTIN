@@ -26,7 +26,7 @@ describe('VRP API Failures (Server / Jaringan Down)', () => {
         await act(async () => {
             try {
                 // FIX: Panggil TANPA argumen
-                await result.current.optimize();
+                await result.current.runAIOptimization();
             } catch (err) {
                 errorCatched = err;
             }
@@ -46,7 +46,7 @@ describe('VRP API Failures (Server / Jaringan Down)', () => {
 
         await act(async () => {
             try {
-                await result.current.optimize();
+                await result.current.runAIOptimization();
             } catch (err) {
                 errorCatched = err;
             }

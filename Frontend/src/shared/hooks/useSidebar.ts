@@ -1,6 +1,5 @@
 import { useContext } from "react";
-import { SidebarContext } from "../context/SidebarContext";
-import type { SidebarContextType } from "../types";
+import { SidebarContext } from "../../context/SidebarContext";
 
 /**
  * useSidebar Hook
@@ -13,7 +12,7 @@ import type { SidebarContextType } from "../types";
  * @example
  * const { isOpen, isMobile, toggle, close, open } = useSidebar();
  */
-export const useSidebar = (): SidebarContextType => {
+export const useSidebar = (): any => {
   const context = useContext(SidebarContext);
 
   if (!context) {

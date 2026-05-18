@@ -1,5 +1,5 @@
 // src/features/routes/components/RouteLoadingOverlay.tsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import Map, { Source, Layer } from 'react-map-gl/mapbox';
 
 interface RouteLoadingOverlayProps {

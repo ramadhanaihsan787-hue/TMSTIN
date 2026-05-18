@@ -1,6 +1,5 @@
 import { useContext } from "react";
-import { AuthContext } from "../context/AuthContext";
-import type { AuthContextType } from "../types";
+import { AuthContext } from "../../context/AuthContext";
 
 /**
  * useAuth Hook
@@ -13,7 +12,7 @@ import type { AuthContextType } from "../types";
  * @example
  * const { user, token, login, logout, isAuthenticated } = useAuth();
  */
-export const useAuth = (): AuthContextType => {
+export const useAuth = (): any => {
   const context = useContext(AuthContext);
 
   if (!context) {

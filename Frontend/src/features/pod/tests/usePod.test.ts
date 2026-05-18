@@ -6,7 +6,7 @@ import { podService } from "../services/podService";
 // 🌟 MOCK POD SERVICE
 vi.mock("../services/podService", () => ({
   podService: {
-    getOrders: vi.fn(),
+    getPodVerifications: vi.fn(),
   },
 }));
 
@@ -17,7 +17,7 @@ describe("🔥 FEATURE: POD MANAGEMENT", () => {
 
   test("1. list render - initial state is correct", async () => {
     // Kita mock API gantung biar useEffect ga bikin error duluan
-    (podService.getOrders as any).mockReturnValue(new Promise(() => {})); 
+    (podService.getPodVerifications as any).mockReturnValue(new Promise(() => {})); 
     
     const { result } = renderHook(() => usePod());
     
@@ -29,7 +29,7 @@ describe("🔥 FEATURE: POD MANAGEMENT", () => {
 
   test("2. fetch data - get POD list success", async () => {
     const mockData = { data: [{ order_id: "DO-123", customer_name: "Toko A" }] };
-    (podService.getOrders as any).mockResolvedValue(mockData);
+    (podService.getPodVerifications as any).mockResolvedValue(mockData);
     
     let resultHook: any;
     await act(async () => {
@@ -37,14 +37,14 @@ describe("🔥 FEATURE: POD MANAGEMENT", () => {
       resultHook = result;
     });
 
-    expect(podService.getOrders).toHaveBeenCalled();
+    expect(podService.getPodVerifications).toHaveBeenCalled();
     expect(resultHook.current.orders.length).toBe(1);
     expect(resultHook.current.orders[0].order_id).toBe("DO-123");
     expect(resultHook.current.isLoading).toBe(false);
   });
 
   test("3. error handling - API down", async () => {
-    (podService.getOrders as any).mockRejectedValue(new Error("Network Error"));
+    (podService.getPodVerifications as any).mockRejectedValue(new Error("Network Error"));
     
     let resultHook: any;
     await act(async () => {
@@ -58,7 +58,7 @@ describe("🔥 FEATURE: POD MANAGEMENT", () => {
   });
 
   test("4. status update - UI state updates correctly", async () => {
-    (podService.getOrders as any).mockResolvedValue({ data: [] });
+    (podService.getPodVerifications as any).mockResolvedValue({ data: [] });
     
     let resultHook: any;
     await act(async () => {
