@@ -18,7 +18,7 @@ export default function LogistikDashboard() {
 
     // 🌟 SET JUDUL SAAT HALAMAN DIBUKA
     useEffect(() => {
-        setTitle("Daily Logistics KPI Dashboard");
+        setTitle("Daily Logistics");
     }, [setTitle]);
 
     const {
@@ -39,7 +39,7 @@ export default function LogistikDashboard() {
             {/* Content Area yang bisa di-scroll */}
             <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
                 <div className="max-w-[1600px] mx-auto flex flex-col gap-6 md:gap-8">
-                    
+
                     {/* SEKSI 1: 4 KARTU KPI UTAMA */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                         <KpiCard

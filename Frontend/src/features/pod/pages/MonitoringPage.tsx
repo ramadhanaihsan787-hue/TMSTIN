@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { toast } from 'sonner'; // 🌟 SUNTIKAN SONNER!
 import Header from "../../../shared/components/Header";
-import ActionMenu from "../components/ActionMenu";
+import { ActionMenu } from "../components";
 import { usePod } from '../hooks/usePod'; 
 
 export default function MonitoringPage() {
