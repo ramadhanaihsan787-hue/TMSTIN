@@ -66,7 +66,7 @@ const createNumberedIcon = (number: number | string, colorHex: string, isDepo: b
 interface RouteProduct { nama_barang: string; qty: string; }
 interface RouteDetail { urutan: number; nama_toko: string; latitude: number; longitude: number; berat_kg: number; jam_tiba: string; distance_from_prev_km: number; items: RouteProduct[]; }
 interface RouteItem { route_id: string; tanggal: string; driver_name: string; kendaraan: string; jenis: string; destinasi_jumlah: number; total_berat: number; total_distance_km: number; status: string; zone: string; detail_rute: RouteDetail[]; garis_aspal?: [number, number][]; capacity?: number; }
-interface Truck3DProps { plateNumber: string; driverName: string; truckType: string; zone: string; colorHex: string; percent: number; outerText: string; loadKg: string; colorClass: string; isSelected: boolean; onClick: () => void; }
+
 
 interface UploadResult { order_id?: string; kode_customer?: string; nama_toko: string; berat?: number; kordinat?: string; alasan?: string; items?: RouteProduct[]; jam_maks?: string; }
 interface DroppedNode { nama_toko: string; berat_kg: number; alasan: string; lat?: number; lon?: number; }
@@ -539,13 +539,8 @@ export default function RoutePlanning() {
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [uploadReport, setUploadReport] = useState<{ success: UploadResult[], failed: UploadResult[] } | null>(null);
     const [failedCoords, setFailedCoords] = useState<Record<number, { lat: string, lon: string }>>({});
-    const [expandedRows, setExpandedRows] = useState<number[]>([]);
     const [popupInfo, setPopupInfo] = useState<any>(null);
-
-    const toggleRow = (idx: number) => {
-        if (expandedRows.includes(idx)) setExpandedRows(expandedRows.filter(i => i !== idx));
-        else setExpandedRows([...expandedRows, idx]);
-    };
+    const [trafficWarnings, setTrafficWarnings] = useState<any[]>([]);
 
     const fetchRoutes = async (date: string) => {
         try {
@@ -600,24 +595,7 @@ export default function RoutePlanning() {
         } catch (error) { console.error("Error API Time Update:", error); }
     };
 
-    const handleSaveCoordinate = async (idx: any, item: any) => {
-        const coords = failedCoords[idx];
-        if (!coords || !coords.lat || !coords.lon) return alert("Isi Latitude dan Longitude dulu Bos!");
 
-        try {
-            const payload = { latitude: parseFloat(coords.lat), longitude: parseFloat(coords.lon), kode_customer: item.kode_customer || item.nama_toko, nama_customer: item.nama_toko };
-            await api.put(`/api/orders/DRAFT-${idx}/coordinate`, payload);
-
-            const currentSuccess = uploadReport ? [...uploadReport.success] : [];
-            currentSuccess.push({ ...item, kordinat: `${coords.lat}, ${coords.lon}` });
-            const currentFailed = uploadReport ? [...uploadReport.failed] : [];
-            setUploadReport({ success: currentSuccess, failed: currentFailed.filter((_, currentIdx) => currentIdx !== idx) });
-            const newFailedCoords = { ...failedCoords }; delete newFailedCoords[idx]; setFailedCoords(newFailedCoords);
-        } catch (error: any) {
-            console.error("Gagal save:", error);
-            alert(`GAGAL: ${error.response?.data?.detail || 'Koordinat bermasalah'}`);
-        }
-    };
 
     const [loadingProgress, setLoadingProgress] = useState(0);
 
