@@ -97,7 +97,10 @@ logs/
 Backend/dist/
 Backend/build/
 
-# Ignore data folder & Excel files
+# 15. Ignore data folder & Excel files
 Backend/data/
 *.xlsx
 *.csv
+
+# 16. Ignore sensitive scripts and seeders
+Backend/scripts/

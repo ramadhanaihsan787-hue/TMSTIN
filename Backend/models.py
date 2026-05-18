@@ -177,9 +177,12 @@ class TMSRouteLine(Base):
     est_arrival = Column(Time) # Estimasi dari VRP
     distance_from_prev_km = Column(Float, default=0.0)
     
-    actual_arrival_time = Column(DateTime, nullable=True) # Waktu saat GPS Truk ngunci Dwell Time 3 Menit
-    actual_service_minutes = Column(Float, nullable=True) # Selisih submit E-POD dengan actual_arrival_time
-    is_anomaly = Column(Boolean, default=False) # True kalau datanya ngaco/ditolak AI
+    geofence_enter_time = Column(DateTime, nullable=True) 
+    gps_ping_count = Column(Integer, default=0) 
+
+    actual_arrival_time = Column(DateTime, nullable=True) 
+    actual_service_minutes = Column(Float, nullable=True) 
+    is_anomaly = Column(Boolean, default=False) 
     
     route_plan = relationship("TMSRoutePlan", back_populates="route_lines")
     order = relationship("DeliveryOrder", back_populates="route_line")
