@@ -212,6 +212,25 @@ export const useRoutePlanningState = () => {
         } catch (error) { console.error("Error API Time Update:", error); }
     }, []);
 
+    const handleUpdateWeight = useCallback(async (id: string | number, w: number) => {
+        await api.put(`/api/orders/${id}/weight`, { weight: w }).catch(console.error);
+    }, []);
+
+    const handleUpdateSuccessCoord = useCallback(async (id: string | number, lat: number, lon: number) => {
+        await api.put(`/api/orders/${id}/coordinate`, { latitude: lat, longitude: lon }).catch(console.error);
+    }, []);
+
+    const handleSaveCoord = useCallback(async (idx: number, code: string, name: string, lat: number, lon: number) => {
+        try {
+            const payload = { latitude: lat, longitude: lon, kode_customer: code, nama_customer: name };
+            await api.put(`/api/orders/DRAFT-${idx}/coordinate`, payload);
+            return true;
+        } catch (error) {
+            console.error(error);
+            return false;
+        }
+    }, []);
+
     const handleOptimizeRoute = useCallback(async () => {
         setIsOptimizing(true);
         setLoadingProgress(10);
@@ -355,6 +374,9 @@ export const useRoutePlanningState = () => {
         handleUploadClick,
         handleFileUpload,
         handleTimeChange,
+        handleUpdateWeight,
+        handleUpdateSuccessCoord,
+        handleSaveCoord,
         handleOptimizeRoute,
         handleConfirmSaveRoute
     };

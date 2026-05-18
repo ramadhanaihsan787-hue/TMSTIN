@@ -9,7 +9,6 @@ import RouteLoadingOverlay from "../components/RouteLoadingOverlay";
 import RoutePreviewModal from "../components/RoutePreviewModal";
 import UploadVerificationModal from "../components/UploadVerificationModal";
 import TruckList from "../components/TruckList";
-import { api } from "../../../shared/services/apiClient";
 
 export default function RoutePlanning() {
     const {
@@ -20,7 +19,9 @@ export default function RoutePlanning() {
         selectedDate, setSelectedDate, showVerificationModal,
         setShowVerificationModal, uploadReport, trafficWarnings, loadingProgress,
         displayRoutes, selectedRoute, totalCost, totalRealDistance, totalFleet, totalOrders, hasDummyData,
-        exitReassignMode, handleFileUpload, handleTimeChange, handleOptimizeRoute, handleConfirmSaveRoute
+        exitReassignMode, handleFileUpload, handleTimeChange,
+        handleUpdateWeight, handleUpdateSuccessCoord, handleSaveCoord,
+        handleOptimizeRoute, handleConfirmSaveRoute
     } = useRoutePlanningState();
 
     const [dispatchDraft, setDispatchDraft] = useState<any>(null);
@@ -190,20 +191,9 @@ export default function RoutePlanning() {
                     uploadReport={uploadReport as any}
                     onClose={() => setShowVerificationModal(false)}
                     onUpdateTime={handleTimeChange}
-                    onUpdateWeight={async (id, w) => { await api.put(`/api/orders/${id}/weight`, { weight: w }).catch(console.error); }}
-                    onUpdateSuccessCoord={async (id, lat, lon) => { 
-                        await api.put(`/api/orders/${id}/coordinate`, { latitude: lat, longitude: lon }).catch(console.error);
-                    }}
-                    onSaveCoord={async (idx, code, name, lat, lon) => { 
-                        try {
-                            const payload = { latitude: lat, longitude: lon, kode_customer: code, nama_customer: name };
-                            await api.put(`/api/orders/DRAFT-${idx}/coordinate`, payload);
-                            return true;
-                        } catch (error) {
-                            console.error(error);
-                            return false;
-                        }
-                    }}
+                    onUpdateWeight={handleUpdateWeight}
+                    onUpdateSuccessCoord={handleUpdateSuccessCoord}
+                    onSaveCoord={handleSaveCoord}
                     onOptimize={handleOptimizeRoute}
                 />
             )}
