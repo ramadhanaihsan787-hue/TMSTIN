@@ -1,6 +1,6 @@
-// src/features/routes/components/RouteDispatchModal.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { api } from "../../../shared/services/apiClient"; // Sesuaikan path jika perlu
 
 interface RouteDispatchModalProps {
     draftData: any;
@@ -9,18 +9,7 @@ interface RouteDispatchModalProps {
     isSaving: boolean;
 }
 
-const DRIVER_LIST = [
-    { id: 1, name: "Joko Wiyono" }, { id: 2, name: "Eko prasetyo" }, 
-    { id: 3, name: "Lestari Primadani" }, { id: 4, name: "Nanang Prianto" },
-    { id: 5, name: "Ari Zasmara" }, { id: 6, name: "Santoso" }, { id: 7, name: "Fauzan" },
-    { id: 88, name: "Supir Pengganti 1 (Harian)" }
-];
-
-const HELPER_LIST = [
-    { id: 101, name: "Oman Surahman" }, { id: 102, name: "Wanto Alfrian" }, 
-    { id: 103, name: "Martono" }, { id: 99, name: "Tanpa Helper" }
-];
-
+// Map ini biarin aja buat logic Auto-Assign truk internal
 const DEDICATED_MAP: Record<string, { d: number, h: number }> = {
     "B 9044 JXS": { d: 1, h: 101 },
     "B 9487 JXS": { d: 2, h: 102 },
@@ -28,31 +17,57 @@ const DEDICATED_MAP: Record<string, { d: number, h: number }> = {
 };
 
 export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, isSaving }: RouteDispatchModalProps) {
-    const [assignments, setAssignments] = useState(() => {
-        const initial: Record<number, { driver_id: number, helper_id: number }> = {};
-        const usedDrivers = new Set<number>();
+    // 🌟 STATE BARU BUAT NAMPUNG DATA API
+    const [driverList, setDriverList] = useState<any[]>([]);
+    const [helperList, setHelperList] = useState<any[]>([]);
+    const [isLoadingCrew, setIsLoadingCrew] = useState(true);
+    
+    const [assignments, setAssignments] = useState<Record<number, { driver_id: number, helper_id: number }>>({});
 
-        draftData.jadwal_truk_internal.forEach((truk: any, idx: number) => {
-            const dedicated = DEDICATED_MAP[truk.armada];
-            let assignedD = 1;
-            let assignedH = 99;
+    // 🌟 NEMBAK API BUAT NGAMBIL DATA ASLI!
+    useEffect(() => {
+        const fetchCrew = async () => {
+            try {
+                const response = await api.get('/api/driver/list/available');
+                if (response.data.status === "success") {
+                    const drivers = response.data.data.drivers;
+                    const helpers = response.data.data.helpers;
+                    setDriverList(drivers);
+                    setHelperList(helpers);
 
-            if (dedicated && !usedDrivers.has(dedicated.d)) {
-                assignedD = dedicated.d;
-                assignedH = dedicated.h;
-                usedDrivers.add(assignedD);
-            } else {
-                const availableDriver = DRIVER_LIST.find(d => !usedDrivers.has(d.id));
-                if (availableDriver) {
-                    assignedD = availableDriver.id;
-                    usedDrivers.add(assignedD);
+                    // Initialize assignments setelah data dateng
+                    const initial: Record<number, { driver_id: number, helper_id: number }> = {};
+                    const usedDrivers = new Set<number>();
+
+                    draftData.jadwal_truk_internal.forEach((truk: any, idx: number) => {
+                        const dedicated = DEDICATED_MAP[truk.armada];
+                        let assignedD = drivers.length > 0 ? drivers[0].id : 0;
+                        let assignedH = 9999; // Default tanpa helper
+
+                        if (dedicated && !usedDrivers.has(dedicated.d)) {
+                            assignedD = dedicated.d;
+                            assignedH = dedicated.h;
+                            usedDrivers.add(assignedD);
+                        } else {
+                            const availableDriver = drivers.find((d: any) => !usedDrivers.has(d.id));
+                            if (availableDriver) {
+                                assignedD = availableDriver.id;
+                                usedDrivers.add(assignedD);
+                            }
+                        }
+                        
+                        initial[idx] = { driver_id: assignedD, helper_id: assignedH };
+                    });
+                    setAssignments(initial);
                 }
+            } catch (error) {
+                toast.error("Gagal memuat data Supir dari HRD");
+            } finally {
+                setIsLoadingCrew(false);
             }
-            
-            initial[idx] = { driver_id: assignedD, helper_id: assignedH };
-        });
-        return initial;
-    });
+        };
+        fetchCrew();
+    }, [draftData]);
 
     const handleAssign = (trukIdx: number, field: 'driver_id' | 'helper_id', val: number) => {
         setAssignments(prev => ({
@@ -65,8 +80,8 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
         const finalData = { ...draftData };
         finalData.jadwal_truk_internal = finalData.jadwal_truk_internal.map((truk: any, idx: number) => ({
             ...truk,
-            driver_id: assignments[idx].driver_id,
-            helper_id: assignments[idx].helper_id === 99 ? null : assignments[idx].helper_id 
+            driver_id: assignments[idx]?.driver_id || 0,
+            helper_id: assignments[idx]?.helper_id === 9999 ? null : assignments[idx]?.helper_id 
         }));
         onConfirmSave(finalData);
     };
@@ -74,9 +89,9 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
     const getAvailableDrivers = (currentIdx: number) => {
         const usedDriverIds = Object.keys(assignments)
             .filter(key => parseInt(key) !== currentIdx)
-            .map(key => assignments[parseInt(key)].driver_id);
+            .map(key => assignments[parseInt(key)]?.driver_id);
         
-        return DRIVER_LIST.map(d => ({
+        return driverList.map(d => ({
             ...d,
             disabled: usedDriverIds.includes(d.id)
         }));
@@ -85,20 +100,21 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
     const getAvailableHelpers = (currentIdx: number) => {
         const usedHelperIds = Object.keys(assignments)
             .filter(key => parseInt(key) !== currentIdx)
-            .map(key => assignments[parseInt(key)].helper_id)
-            .filter(id => id !== 99); 
+            .map(key => assignments[parseInt(key)]?.helper_id)
+            .filter(id => id !== 9999); 
             
-        return HELPER_LIST.map(h => ({
+        return helperList.map(h => ({
             ...h,
-            disabled: usedHelperIds.includes(h.id) && h.id !== 99
+            disabled: usedHelperIds.includes(h.id) && h.id !== 9999
         }));
     };
+
+    if (isLoadingCrew) return <div className="fixed inset-0 z-[9999999] bg-slate-900/90 flex items-center justify-center"><div className="animate-spin text-white">Loading Crew Data...</div></div>;
 
     return (
         <div className="fixed inset-0 z-[9999999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white dark:bg-[#111] rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden animate-in zoom-in-95">
                 
-                {/* 🌟 HEADER MODAL */}
                 <div className="p-6 border-b border-slate-200 dark:border-[#333] flex justify-between items-center bg-slate-50 dark:bg-[#1A1A1A]">
                     <div>
                         <h2 className="text-2xl font-black uppercase text-slate-800 dark:text-white flex items-center gap-2">
@@ -133,7 +149,7 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
                                     <div className="flex flex-col gap-1 w-full sm:w-48">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase">Supir Utama</label>
                                         <select 
-                                            value={assignments[idx].driver_id} 
+                                            value={assignments[idx]?.driver_id || ""} 
                                             onChange={(e) => handleAssign(idx, 'driver_id', parseInt(e.target.value))}
                                             className="w-full bg-slate-50 dark:bg-[#111] border border-slate-200 dark:border-[#444] rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary outline-none"
                                         >
@@ -148,7 +164,7 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
                                     <div className="flex flex-col gap-1 w-full sm:w-48">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase">Helper (Knek)</label>
                                         <select 
-                                            value={assignments[idx].helper_id} 
+                                            value={assignments[idx]?.helper_id || ""} 
                                             onChange={(e) => handleAssign(idx, 'helper_id', parseInt(e.target.value))}
                                             className="w-full bg-slate-50 dark:bg-[#111] border border-slate-200 dark:border-[#444] rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary outline-none"
                                         >
@@ -165,7 +181,6 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
                     })}
                 </div>
 
-                {/* 🌟 FOOTER MODAL (TOMBOL SIMPAN) */}
                 <div className="p-6 border-t border-slate-200 dark:border-[#333] bg-white dark:bg-[#1A1A1A] flex justify-end gap-3">
                     <button onClick={onBack} disabled={isSaving} className="px-6 py-3 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#333] rounded-xl transition-colors">
                         Kembali ke Peta

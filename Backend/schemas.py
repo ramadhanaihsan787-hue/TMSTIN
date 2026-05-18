@@ -20,6 +20,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     role: str
+    
 
 # ==========================================
 # 📦 DELIVERY ORDER SCHEMAS
@@ -497,6 +498,7 @@ class LoginResponse(BaseModel):
     role: str
     full_name: str
     user_id: int
+    refresh_token: Optional[str] = None
 
 class RegisterRequest(BaseModel):
     username: str

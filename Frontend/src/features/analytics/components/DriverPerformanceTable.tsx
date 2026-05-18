@@ -1,14 +1,31 @@
-import React from 'react';
-import type { DriverPerformance } from '../types';
+import React, { useState, useEffect } from 'react';
+import { api } from '../../../shared/services/apiClient'; // 🌟 IMPORT API KITA
+import type { DriverPerformance } from '../types'; // Boleh dibiarin kalau ada, tapi kita pake 'any' dulu sementara
 
-interface DriverPerformanceTableProps {
-    loading: boolean;
-    drivers: any[]; // Pakai any sementara biar kebal dari perbedaan format API
-}
+export default function DriverPerformanceTable() {
+    // 🌟 STATE MANDIRI BUAT NARIK DATA API
+    const [drivers, setDrivers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
-export default function DriverPerformanceTable({ loading, drivers }: DriverPerformanceTableProps) {
+    useEffect(() => {
+        const fetchDriverPerformance = async () => {
+            try {
+                // Nembak ke endpoint yang tadi kita bikin di driver.py
+                const response = await api.get('/api/driver/performance');
+                if (response.data.status === 'success') {
+                    setDrivers(response.data.data);
+                }
+            } catch (error) {
+                console.error("Gagal narik data Driver Performance:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDriverPerformance();
+    }, []);
     
-    // 🌟 FIX CTO: Bikin pembuat avatar otomatis yang kebal error (anti .split crash)
+    // Bikin pembuat avatar otomatis yang kebal error (anti .split crash)
     const getAvatar = (name: string) => {
         const safeName = (name || "Driver").replace(/\s/g, '+');
         return `https://ui-avatars.com/api/?name=${safeName}&background=0D8ABC&color=fff`;
@@ -33,15 +50,21 @@ export default function DriverPerformanceTable({ loading, drivers }: DriverPerfo
                     <tbody className="divide-y divide-slate-100 dark:divide-[#333]">
                         {loading ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Loading driver performance data...</td>
+                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                                    <span className="material-symbols-outlined animate-spin text-primary block mb-2 text-2xl">refresh</span>
+                                    Loading driver performance data...
+                                </td>
                             </tr>
                         ) : drivers.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">No driver data available yet.</td>
+                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                                    <span className="material-symbols-outlined block mb-2 text-2xl opacity-50">person_off</span>
+                                    No driver data available yet.
+                                </td>
                             </tr>
                         ) : (
                             drivers.map((driver, index) => {
-                                // 🌟 Jembatan data: Antisipasi nama variabel beda dari Backend
+                                // Jembatan data: Antisipasi nama variabel beda dari Backend
                                 const name = driver.name || driver.driverName || driver.nama_supir || "Unknown Driver";
                                 const trips = driver.totalTrips || driver.trips || driver.total_rute || 0;
                                 const onTime = driver.onTimeRate || driver.ontime || driver.on_time_rate || "0%";

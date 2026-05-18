@@ -54,8 +54,9 @@ class HRDriver(Base):
     phone = Column(String(15))
     status = Column(Boolean, default=True)
     
-    user_account = relationship("User", back_populates="driver_profile")
+    is_helper = Column(Boolean, default=False) 
     
+    user_account = relationship("User", back_populates="driver_profile")
     route_plans = relationship("TMSRoutePlan", foreign_keys="TMSRoutePlan.driver_id", back_populates="driver")
 
 # ==========================================
@@ -160,8 +161,9 @@ class TMSRoutePlan(Base):
     
     vehicle = relationship("FleetVehicle", back_populates="route_plans")
     
-    driver = relationship("HRDriver", foreign_keys="TMSRoutePlan.driver_id", back_populates="route_plans")
-    helper = relationship("HRDriver", foreign_keys="TMSRoutePlan.helper_id")
+    # 🌟 FIX CTO PRIORITY 1: Definisi Foreign Key Eksplisit Biar Ga Ketuker!
+    driver = relationship("HRDriver", foreign_keys=[driver_id], back_populates="route_plans")
+    helper = relationship("HRDriver", foreign_keys=[helper_id])
     
     route_lines = relationship("TMSRouteLine", back_populates="route_plan")
 

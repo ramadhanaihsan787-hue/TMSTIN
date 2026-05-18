@@ -6,3 +6,4 @@ export { default as RouteMap } from './RouteMap';
 export { default as RouteLoadingOverlay } from './RouteLoadingOverlay';
 export { default as UploadVerificationModal } from './UploadVerificationModal';
 export { default as RoutePreviewModal } from './RoutePreviewModal';
+export { default as BatchPrintManifest } from './BatchPrintManifest';

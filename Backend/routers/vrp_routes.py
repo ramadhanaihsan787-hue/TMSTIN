@@ -1,205 +1,26 @@
-# Backend/routers/vrp.py
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+# Backend/routers/vrp_routes.py
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 import datetime
 import json
 import math
 import os
-import uuid
+import shutil
+import openpyxl
 import logging
 
-from database import SessionLocal
 import models
 import schemas
-from services import vrp_service 
-from services import map_service
+from services import osrm_service, eta_service, zoning_service
 from dependencies import get_db, get_settings, get_current_user, require_role
-from services import traffic_validator
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["VRP & Route Planning"])
-
-VRP_JOBS = {}
+router = APIRouter(prefix="/api", tags=["Route Management & Export"])
 
 # ==========================================
-# 1. BARISTA NYEDUH KOPI (FUNGSI BACKGROUND VRP UTAMA)
-# ==========================================
-def run_vrp_optimization_task(job_id: str, preview: bool):
-    """Heavy lifting jalan di Pipeline VRP GLOBAL murni!"""
-    db = SessionLocal() 
-    try:
-        VRP_JOBS[job_id]["phase"] = "zoning"
-        VRP_JOBS[job_id]["progress"] = 20
-        
-        settings = get_settings()
-        pending_orders = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.status == models.DOStatus.do_verified).all()
-        if not pending_orders: raise Exception("Tidak ada Delivery Order terverifikasi!")
-
-        vehicles = db.query(models.FleetVehicle).filter(models.FleetVehicle.status == "Available").all()
-        if not vehicles: raise Exception("Armada tidak tersedia!")
-
-        # 🌟 KABEL BARU 1: Siapin bahan baku buat VRP Global
-        vrp_input = vrp_service.VRPService.prepare_vrp_data(pending_orders, vehicles, settings)
-        
-        # OSRM butuh list of dict, jadi kita konversi format koordinatnya
-        locs = [{"lat": lat, "lon": lon} for lat, lon in vrp_input["coordinates"]]
-        dist_mat, time_mat = map_service.build_osrm_matrix(locs)
-        if not dist_mat:
-            dist_mat, time_mat = map_service.build_haversine_matrix(locs)
-
-        # 🌟 KABEL BARU 2: Panggil Otak AI VRP Global
-        hasil = vrp_service.VRPService.solve_and_format(vrp_input, dist_mat, time_mat, settings)
-
-        formatted_routes = []
-        spillover = []
-
-        if hasil:
-            from utils.helpers import menit_ke_jam
-            
-            # Jahit hasil rute mentah AI jadi format cakep buat Frontend & DB
-            for route in hasil["routes"]:
-                truck_idx = route["truck_index"]
-                assigned_vehicle = vehicles[truck_idx]
-                node_seq = route["node_sequence"]
-
-                manifest = []
-                current_time = 420 # 07:00 Pagi keberangkatan dari depo
-                prev_node = 0
-                total_jarak_m = 0
-                total_berat = 0
-
-                for step, node_idx in enumerate(node_seq):
-                    seg_m = dist_mat[prev_node][node_idx] if step != 0 else 0
-                    seg_km = round(seg_m / 1000.0, 1)
-
-                    if node_idx == 0:
-                        if step != 0: current_time += time_mat[prev_node][node_idx]
-                        manifest.append({
-                            "urutan": step, "lokasi": "📍 GUDANG JAPFA",
-                            "jam": str(menit_ke_jam(current_time)),
-                            "keterangan": "Start" if step == 0 else "Finish",
-                            "lat": settings.depo_lat, "lon": settings.depo_lon,
-                            "distance_from_prev_km": seg_km
-                        })
-                    else:
-                        order_id = vrp_input["order_mapping"][node_idx]
-                        order = next(o for o in pending_orders if o.order_id == order_id)
-
-                        is_mall = vrp_input["is_mall_list"][node_idx]
-                        base_time = 60 if is_mall else 15
-                        var_time = (float(order.weight_total) / 10.0) * 1.0
-                        service_time = base_time + var_time
-
-                        current_time += time_mat[prev_node][node_idx]
-
-                        store_name = order.customer.store_name if hasattr(order, 'customer') and order.customer else (order.customer_name if hasattr(order, 'customer_name') else "Toko")
-
-                        manifest.append({
-                            "urutan": step,
-                            "nomor_do": order.order_id,
-                            "nama_toko": store_name,
-                            "turun_barang_kg": round(float(order.weight_total), 2),
-                            "jam_tiba": str(menit_ke_jam(current_time)),
-                            "lat": float(order.latitude), "lon": float(order.longitude),
-                            "distance_from_prev_km": seg_km
-                        })
-
-                        current_time += service_time
-                        total_berat += float(order.weight_total)
-
-                    total_jarak_m += seg_m
-                    prev_node = node_idx
-
-                route_geometry = map_service.get_road_geometry(node_seq, locs)
-
-                formatted_routes.append({
-                    "route_id": f"RP-{datetime.datetime.now().strftime('%Y%m%d')}-T{truck_idx+1}",
-                    "color_index": truck_idx,
-                    "armada": assigned_vehicle.license_plate,
-                    "driver_id": assigned_vehicle.default_driver_id,
-                    "helper_id": assigned_vehicle.co_driver_id,
-                    "total_muatan_kg": total_berat,
-                    "total_jarak_km": round(total_jarak_m / 1000.0, 1),
-                    "detail_perjalanan": manifest,
-                    "garis_aspal": route_geometry
-                })
-
-            # Format dropped nodes buat masuk ke Keranjang Merah
-            for dropped_id in hasil["dropped_node_ids"]:
-                order = next(o for o in pending_orders if o.order_id == dropped_id)
-                store_name = order.customer.store_name if hasattr(order, 'customer') and order.customer else (order.customer_name if hasattr(order, 'customer_name') else "Toko")
-                spillover.append({
-                    "nama_toko": store_name,
-                    "berat_kg": float(order.weight_total),
-                    "alasan": "Drop VRP Global (Kapasitas Maksimal / Waktu Lembur Habis)",
-                    "lat": float(order.latitude),
-                    "lon": float(order.longitude)
-                })
-
-        VRP_JOBS[job_id]["phase"] = "done"
-        VRP_JOBS[job_id]["progress"] = 100
-
-        today = datetime.datetime.now().date()
-        
-        # Simpan ke DB sementara (kalau bukan preview)
-        if not preview:
-            rute_lama = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).all()
-            for rute in rute_lama:
-                db.query(models.TMSRouteLine).filter(models.TMSRouteLine.route_id == rute.route_id).delete()
-            db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).delete()
-            db.commit()
-
-        # Lempar hasil ke Job RAM biar bisa ditangkep Frontend
-        VRP_JOBS[job_id] = {
-            "status": "completed",
-            "phase": "done",
-            "progress": 100,
-            "data": {
-                "message": f"[PREVIEW] {len(formatted_routes)} rute berhasil dibuat.",
-                "total_trucks": len(formatted_routes), 
-                "total_orders": len(pending_orders), 
-                "dropped_count": len(spillover),
-                "jadwal_truk_internal": formatted_routes, 
-                "dropped_nodes_peta": spillover
-            }
-        }
-
-    except Exception as e:
-        db.rollback()
-        logger.error(f"🚨 [VRP BACKGROUND TASK ERROR]: {str(e)}", exc_info=True)
-        VRP_JOBS[job_id] = {"status": "failed", "message": str(e)}
-    finally:
-        db.close() 
-
-# ==========================================
-# 2. ENDPOINT MINTA TIKET & POLLING VRP
-# ==========================================
-@router.post("/routes/optimize/start")
-def start_optimize_routes(
-    background_tasks: BackgroundTasks,
-    preview: bool = False,
-    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
-):
-    job_id = str(uuid.uuid4())
-    VRP_JOBS[job_id] = {
-        "status": "processing",
-        "phase": "init",
-        "progress": 5,
-        "message": "Memulai inisialisasi AI Pipeline...",
-        "data": None
-    }
-    background_tasks.add_task(run_vrp_optimization_task, job_id, preview)
-    return {"status": "success", "job_id": job_id}
-
-@router.get("/routes/optimize/status/{job_id}")
-def check_optimization_status(job_id: str):
-    job_info = VRP_JOBS.get(job_id)
-    if not job_info: raise HTTPException(status_code=404, detail="Job ID tidak ditemukan.")
-    return job_info
-
-# ==========================================
-# 3. ENDPOINT RESEQUENCE (TSP) SETELAH MANUAL OVERRIDE
+# 1. ENDPOINT RESEQUENCE (TSP) SETELAH MANUAL OVERRIDE
 # ==========================================
 @router.post("/routes/resequence")
 def resequence_routes(payload: dict, db: Session = Depends(get_db)):
@@ -231,9 +52,9 @@ def resequence_routes(payload: dict, db: Session = Depends(get_db)):
                 demands.append(int(berat))
                 customer_map[idx + 1] = c
             
-            dist_mat, time_mat = map_service.build_osrm_matrix(locations)
+            dist_mat, time_mat = osrm_service.build_osrm_matrix(locations)
             if not dist_mat:
-                dist_mat, time_mat = map_service.build_haversine_matrix(locations)
+                dist_mat, time_mat = osrm_service.build_haversine_matrix(locations)
             
             matrix_km = [[int(d / 1000) for d in row] for row in dist_mat]
             
@@ -293,7 +114,7 @@ def resequence_routes(payload: dict, db: Session = Depends(get_db)):
                 "keterangan": "Finish", "lat": DEPO_LAT, "lon": DEPO_LON, "distance_from_prev_km": est_finish_km
             })
                 
-            route_geometry = map_service.get_road_geometry(best_indices + [0], locations)
+            route_geometry = osrm_service.get_road_geometry(best_indices + [0], locations)
             truk["garis_aspal"] = route_geometry
             truk["detail_perjalanan"] = new_manifest
             truk["total_jarak_km"] = round(total_jarak_m / 1000.0, 1)
@@ -304,9 +125,8 @@ def resequence_routes(payload: dict, db: Session = Depends(get_db)):
         logger.error(f"🚨 [RESEQUENCE ERROR]: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Gagal menghitung ulang urutan rute.")
 
-
 # ==========================================
-# 4. ENDPOINT GET & CONFIRM ROUTES (FIX DISPATCHING)
+# 2. GET & CONFIRM ROUTES
 # ==========================================
 @router.get("/routes", response_model=schemas.GetRoutesResponse)
 def get_routes(
@@ -453,45 +273,7 @@ def get_load_plan(route_id: str, db: Session = Depends(get_db), current_user: mo
     return {"status": "success", "data": result}
 
 # ==========================================
-# 5. ENDPOINT VALIDASI MACET
-# ==========================================
-TRAFFIC_JOBS = {}
-
-@router.post("/routes/validate-traffic/{job_id}")
-def start_traffic_validation(
-    job_id: str, background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
-):
-    vrp_result = VRP_JOBS.get(job_id)
-    if not vrp_result or vrp_result["status"] != "completed":
-        raise HTTPException(400, "VRP belum selesai atau job tidak ditemukan")
-    
-    TRAFFIC_JOBS[job_id] = {"status": "processing"}
-    background_tasks.add_task(_run_traffic_validation, job_id, vrp_result)
-    return {"status": "success", "message": "Traffic validation dimulai"}
-
-def _run_traffic_validation(job_id: str, vrp_result: dict):
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    routes = vrp_result["data"]["jadwal_truk_internal"]
-    all_warnings = []
-    
-    for route in routes:
-        result = traffic_validator.validate_route_traffic(route, today)
-        all_warnings.extend(result.get("warnings", []))
-    
-    TRAFFIC_JOBS[job_id] = {
-        "status": "completed",
-        "total_warnings": len(all_warnings),
-        "critical_count": sum(1 for w in all_warnings if w["severity"] == "HIGH"),
-        "warnings": all_warnings,
-    }
-
-@router.get("/routes/validate-traffic/{job_id}/status")
-def get_traffic_validation_status(job_id: str):
-    return TRAFFIC_JOBS.get(job_id, {"status": "not_found"})
-
-# ==========================================
-# 🌟 SPRINT 3: ENDPOINT SPATIAL PREVIEW (ZONING KOTAK)
+# 3. SPATIAL PREVIEW (ZONING KOTAK)
 # ==========================================
 @router.post("/routes/spatial-preview")
 def preview_spatial_zones(
@@ -513,7 +295,7 @@ def preview_spatial_zones(
                 "berat": float(order.weight_total)
             })
 
-        zoning_data = map_service.generate_spatial_zones(locations, num_zones=7)
+        zoning_data = zoning_service.generate_spatial_zones(locations, num_zones=7)
 
         return {
             "status": "success",
@@ -524,3 +306,108 @@ def preview_spatial_zones(
     except Exception as e:
         logger.error(f"🚨 [SPATIAL ZONING ERROR]: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# 4. EXPORT KE CORPORATE EXCEL TEMPLATE
+# ==========================================
+@router.get("/routes/export-excel", response_class=FileResponse)
+def export_all_routes_to_excel(date: str, db: Session = Depends(get_db)):
+    try:
+        target_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
+        routes = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == target_date).all()
+        
+        if not routes:
+            raise HTTPException(status_code=400, detail="Tidak ada rute berjalan di tanggal ini!")
+
+        template_path = "templates/DO_TEMPLATE.xlsx"
+        output_filename = f"Surat_Jalan_JAPFA_{date}.xlsx"
+        
+        os.makedirs("static/uploads", exist_ok=True)
+        output_path = f"static/uploads/{output_filename}"
+        
+        if not os.path.exists(template_path):
+            raise HTTPException(status_code=404, detail="File DO_TEMPLATE.xlsx tidak ditemukan di folder Backend/templates/")
+
+        shutil.copyfile(template_path, output_path)
+        wb = openpyxl.load_workbook(output_path)
+        sheet_name = "JADWAL" if "JADWAL" in wb.sheetnames else wb.sheetnames[0]
+        ws = wb[sheet_name]
+
+        def tulis_sel(col_letter, row_number, val):
+            coord = f"{col_letter}{row_number}"
+            cell = ws[coord]
+            
+            if type(cell).__name__ == 'MergedCell':
+                for m_range in ws.merged_cells.ranges:
+                    if coord in m_range:
+                        ws.cell(row=m_range.min_row, column=m_range.min_col).value = val
+                        break
+            else:
+                cell.value = val
+        
+        BLOCK_HEIGHT = 36 
+        
+        for idx, rute in enumerate(routes):
+            offset = idx * BLOCK_HEIGHT
+            
+            if idx == 0:
+                tulis_sel("I", 2, str(target_date))
+            
+            tulis_sel("C", 7 + offset, rute.vehicle.license_plate if rute.vehicle else "-")
+            tulis_sel("J", 7 + offset, rute.driver.name if rute.driver else "-")
+            tulis_sel("J", 8 + offset, rute.helper.name if hasattr(rute, 'helper') and rute.helper else "Tanpa Helper")
+            
+            lines = db.query(models.TMSRouteLine).filter(
+                models.TMSRouteLine.route_id == rute.route_id
+            ).order_by(models.TMSRouteLine.sequence).all()
+            
+            for item_idx, line in enumerate(lines):
+                if item_idx >= 30: 
+                    break 
+                    
+                row_target = 10 + offset + item_idx
+                order = line.order
+                if not order: continue
+                
+                nama_toko = "Toko JAPFA"
+                kode_toko = ""
+                if hasattr(order, 'customer') and order.customer:
+                    nama_toko = order.customer.store_name
+                    kode_toko = order.customer.kode_customer or ""
+                elif hasattr(order, 'customer_name') and order.customer_name:
+                    nama_toko = order.customer_name
+
+                jenis_barang = "FROZEN"
+                kategori = "AYAM"
+                if order.service_type and order.service_type.startswith('['):
+                    try:
+                        items = json.loads(order.service_type)
+                        if len(items) > 0:
+                            jenis_barang = items[0].get('tipe', 'FROZEN')
+                    except: pass
+                
+                tulis_sel("A", row_target, rute.vehicle.license_plate if rute.vehicle else "-")
+                tulis_sel("B", row_target, line.sequence)
+                tulis_sel("C", row_target, kode_toko)
+                tulis_sel("D", row_target, nama_toko)
+                tulis_sel("E", row_target, float(order.weight_total) if order.weight_total else 0)
+                tulis_sel("F", row_target, jenis_barang)
+                tulis_sel("G", row_target, kategori)
+                tulis_sel("H", row_target, str(line.est_arrival)[:5] if line.est_arrival else "-")
+                tulis_sel("K", row_target, order.order_id)
+                
+            tulis_sel("E", 41 + offset, rute.total_weight)
+            
+        wb.save(output_path)
+        
+        return FileResponse(
+            path=output_path, 
+            filename=output_filename,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"🚨 [EXCEL EXPORT ERROR]: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Gagal generate Excel: {str(e)}")

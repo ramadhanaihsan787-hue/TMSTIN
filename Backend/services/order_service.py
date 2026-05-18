@@ -1,33 +1,42 @@
+# Backend/services/order_service.py
 """
-Order Service - Delivery order processing and management
+Order Service - Delivery order processing and management (Enterprise Grade)
 """
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from datetime import datetime
+
 import models
-from schemas import OrderCreate, OrderResponse
+from schemas import OrderCreate
 from utils.helpers import classify_store, time_str_to_minutes
+import logging
+
+logger = logging.getLogger(__name__)
+
+# ==========================================
+# 🌟 CUSTOM EXCEPTIONS
+# ==========================================
+class OrderServiceError(Exception):
+    pass
+
+class OrderNotFoundError(OrderServiceError):
+    pass
+
+class OrderValidationError(OrderServiceError):
+    pass
 
 
 class OrderService:
-    """Service for order operations"""
+    """Service for order operations (Flush-Only Policy)"""
     
+    # ==========================================
+    # KUMPULAN FUNGSI LAMA (UDAH DI-UPGRADE KE FLUSH)
+    # ==========================================
     @staticmethod
     def create_order(db: Session, order_data: OrderCreate) -> models.DeliveryOrder:
-        """
-        Create new delivery order
-        
-        Args:
-            db: Database session
-            order_data: OrderCreate schema
-            
-        Returns:
-            Created DeliveryOrder object
-        """
-        # Classify store type
         is_mall = classify_store(order_data.customer_name)
         
-        # Create order
         order = models.DeliveryOrder(
             order_id=order_data.order_id,
             customer_name=order_data.customer_name,
@@ -42,157 +51,153 @@ class OrderService:
         )
         
         db.add(order)
-        db.commit()
-        db.refresh(order)
-        
+        db.flush() # 🌟 Upgrade: Biar Router yang nge-commit
         return order
-    
     
     @staticmethod
     def get_order(db: Session, order_id: str) -> models.DeliveryOrder:
-        """
-        Get order by ID
-        
-        Args:
-            db: Database session
-            order_id: Order ID
-            
-        Returns:
-            DeliveryOrder object if found, None otherwise
-        """
-        return db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.order_id == order_id
-        ).first()
-    
+        return db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
     
     @staticmethod
-    def get_orders_by_date(db: Session, date: str) -> List[models.DeliveryOrder]:
-        """
-        Get all orders for a specific date
-        
-        Args:
-            db: Database session
-            date: Date string (YYYY-MM-DD)
-            
-        Returns:
-            List of DeliveryOrder objects
-        """
+    def get_orders_by_date(db: Session, date_str: str) -> List[models.DeliveryOrder]:
         from datetime import datetime as dt
-        date_obj = dt.strptime(date, "%Y-%m-%d").date()
+        date_obj = dt.strptime(date_str, "%Y-%m-%d").date()
         
-        orders = db.query(models.DeliveryOrder).filter(
+        return db.query(models.DeliveryOrder).filter(
             models.DeliveryOrder.created_at >= dt.combine(date_obj, dt.min.time()),
             models.DeliveryOrder.created_at < dt.combine(date_obj, dt.max.time())
         ).all()
-        
-        return orders
-    
     
     @staticmethod
-    def update_order_status(
-        db: Session,
-        order_id: str,
-        status: models.DOStatus
-    ) -> models.DeliveryOrder:
-        """
-        Update order status
-        
-        Args:
-            db: Database session
-            order_id: Order ID
-            status: New status
+    def update_order_status(db: Session, order_id: str, status: models.DOStatus) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
             
-        Returns:
-            Updated DeliveryOrder object
-        """
-        order = db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.order_id == order_id
-        ).first()
-        
-        if order:
-            order.status = status
-            db.commit()
-            db.refresh(order)
-        
+        order.status = status
+        db.flush() # 🌟 Upgrade
         return order
-    
     
     @staticmethod
-    def assign_order_to_route(
-        db: Session,
-        order_id: str,
-        route_id: str,
-        driver_id: int
-    ) -> models.DeliveryOrder:
-        """
-        Assign order to route
-        
-        Args:
-            db: Database session
-            order_id: Order ID
-            route_id: Route ID
-            driver_id: Driver ID
+    def assign_order_to_route(db: Session, order_id: str, route_id: str, driver_id: int) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
             
-        Returns:
-            Updated DeliveryOrder object
-        """
-        order = db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.order_id == order_id
-        ).first()
-        
-        if order:
-            order.route_id = route_id
-            order.driver_id = driver_id
-            order.status = models.DOStatus.do_assigned_to_route
-            db.commit()
-            db.refresh(order)
-        
+        order.route_id = route_id
+        order.driver_id = driver_id
+        order.status = models.DOStatus.do_assigned_to_route
+        db.flush() # 🌟 Upgrade
         return order
-    
     
     @staticmethod
     def get_pending_orders(db: Session) -> List[models.DeliveryOrder]:
-        """
-        Get all pending orders (not assigned to routes)
-        
-        Args:
-            db: Database session
-            
-        Returns:
-            List of pending DeliveryOrder objects
-        """
-        return db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.status == models.DOStatus.do_verified
-        ).all()
-    
-    
+        return db.query(models.DeliveryOrder).filter(models.DeliveryOrder.status == models.DOStatus.do_verified).all()
+
+    # ==========================================
+    # KUMPULAN FUNGSI BARU (DARI HASIL REFACTORING KITA)
+    # ==========================================
     @staticmethod
-    def update_order_coordinates(
-        db: Session,
-        order_id: str,
-        latitude: float,
-        longitude: float
-    ) -> models.DeliveryOrder:
-        """
-        Update order delivery coordinates
+    def update_time_window(db: Session, order_id: str, jam_maksimal: str) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
+
+        if not jam_maksimal:
+            order.delivery_window_end = 1200 
+        else:
+            try:
+                h, m = map(int, jam_maksimal.split(":"))
+                order.delivery_window_end = (h * 60) + m
+            except Exception:
+                raise OrderValidationError("Format jam salah! Gunakan format HH:MM (contoh: 14:30)")
         
-        Args:
-            db: Database session
-            order_id: Order ID
-            latitude: New latitude
-            longitude: New longitude
+        db.flush() 
+        return order
+
+    @staticmethod
+    def update_coordinate(db: Session, order_id: str, lat: float, lon: float, kode_cust: str, nama_cust: str):
+        # 🌟 Gabungan update koordinat + Sinkronisasi Master Customer
+        master = db.query(models.MasterCustomer).filter(models.MasterCustomer.kode_customer == kode_cust).first()
+        if master:
+            master.latitude, master.longitude = lat, lon
+        else:
+            master = models.MasterCustomer(kode_customer=kode_cust, store_name=nama_cust, latitude=lat, longitude=lon)
+            db.add(master)
+
+        if order_id.startswith("DRAFT-"):
+            db.flush()
+            return None
+
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
+
+        order.latitude = lat
+        order.longitude = lon
+        order.status = models.DOStatus.do_verified
+        
+        db.flush() 
+        return order
+
+    @staticmethod
+    def approve_pod(db: Session, order_id: str) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
+        
+        valid_statuses = [
+            models.DOStatus.delivered_pod_uploaded,
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial
+        ]
+        if order.status not in valid_statuses:
+            raise OrderValidationError(f"Tidak bisa approve POD. Status DO saat ini: {order.status.value}")
+
+        order.status = models.DOStatus.billed
+
+        if order.route_line and order.route_line.epod:
+            order.route_line.epod.status = models.DOStatus.billed
+
+        db.flush() 
+        return order
+
+    @staticmethod
+    def reject_pod(db: Session, order_id: str, reason: str, notes: str) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
+        
+        valid_statuses = [
+            models.DOStatus.delivered_pod_uploaded,
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial
+        ]
+        if order.status not in valid_statuses:
+            raise OrderValidationError(f"Tidak bisa reject POD. Status DO saat ini: {order.status.value}")
+
+        order.status = models.DOStatus.do_assigned_to_route
+        
+        if order.route_line and order.route_line.epod:
+            rejection_note = f"DITOLAK ADMIN. Alasan: {reason}"
+            if notes:
+                rejection_note += f" ({notes})"
             
-        Returns:
-            Updated DeliveryOrder object
-        """
-        order = db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.order_id == order_id
-        ).first()
+            order.route_line.epod.status = models.DOStatus.do_assigned_to_route
+            if order.route_line.epod.driver_notes:
+                order.route_line.epod.driver_notes += f" | {rejection_note}"
+            else:
+                order.route_line.epod.driver_notes = rejection_note
         
-        if order:
-            order.latitude = latitude
-            order.longitude = longitude
-            db.commit()
-            db.refresh(order)
+        db.flush() 
+        return order
+
+    @staticmethod
+    def update_weight(db: Session, order_id: str, weight: float) -> models.DeliveryOrder:
+        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+        if not order:
+            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
         
+        order.weight_total = weight
+        db.flush() 
         return order

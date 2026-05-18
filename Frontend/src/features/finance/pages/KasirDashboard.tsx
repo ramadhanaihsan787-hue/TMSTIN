@@ -4,12 +4,17 @@ import { toast } from 'sonner';
 import { useExpenses } from '../hooks/useExpenses';
 import { formatRp } from '../constants'; 
 import type { ExpenseEntry } from '../types';
+import { api } from '../../../shared/services/apiClient'; // 🌟 IMPORT API LU
 
 export default function KasirDashboard() {
     const topRef = useRef<HTMLDivElement>(null);
     
-    // 🌟 KITA PAKE FETCH TODAY LAGI (Sesuai kemauan Bos Ihsan!)
+    // Tarik logic bawaan
     const { entries, fleets, drivers, isLoading, isMasterLoading, fetchToday, fetchMasterData, saveEntry, deleteEntry } = useExpenses();
+
+    // 🌟 STATE BARU: Khusus nampung Truk yang beneran jalan hari ini!
+    const [activeDispatches, setActiveDispatches] = useState<any[]>([]);
+    const [isLoadingDispatch, setIsLoadingDispatch] = useState(true);
 
     // Form states
     const [selectedPlate, setSelectedPlate] = useState('');
@@ -19,6 +24,7 @@ export default function KasirDashboard() {
     const [customDriver, setCustomDriver] = useState('');
     const [selectedHelper, setSelectedHelper] = useState('');
     const [customHelper, setCustomHelper] = useState('');
+    const [vehicleType, setVehicleType] = useState('Unknown');
     
     const [bbm, setBbm] = useState('');
     const [tol, setTol] = useState('');
@@ -30,26 +36,55 @@ export default function KasirDashboard() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
 
-    // 🌟 STATE BUAT FITUR EXCEL
+    // STATE BUAT FITUR EXCEL
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Initial Fetch (Pasti selalu narik data hari ini)
+    // Initial Fetch
     useEffect(() => {
         fetchToday();
         fetchMasterData();
+        
+        // 🌟 ZAP! Narik Jembatan dari Backend
+        const fetchActiveRoutes = async () => {
+            try {
+                const res = await api.get('/api/driver/active-dispatch');
+                if (res.data.status === 'success') {
+                    setActiveDispatches(res.data.data);
+                    // Set default ke truk pertama yang ada di list aktif
+                    if (res.data.data.length > 0) {
+                        const first = res.data.data[0];
+                        setSelectedPlate(first.plate);
+                        setSelectedDriver(first.driver);
+                        setSelectedHelper(first.helper || '');
+                        setVehicleType(first.vehicleType);
+                    }
+                }
+            } catch (err) {
+                console.error("Gagal narik jadwal dispatch hari ini", err);
+            } finally {
+                setIsLoadingDispatch(false);
+            }
+        };
+        fetchActiveRoutes();
     }, []);
 
-    // AUTO SELECT INDEX 0 SAAT DATA MASTER SELESAI DI LOAD
-    useEffect(() => {
-        if (fleets.length > 0 && !selectedPlate) setSelectedPlate(fleets[0].plate);
-        if (drivers.length > 0 && !selectedDriver) setSelectedDriver(drivers[0]);
-    }, [fleets, drivers]);
+    // 🌟 LOGIC SAKTI: Kalau kasir ganti plat nomor, Supir & Helper otomatis keganti (Dari data Dispatch)!
+    const handlePlateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const plate = e.target.value;
+        setSelectedPlate(plate);
+        
+        const dispatch = activeDispatches.find(d => d.plate === plate);
+        if (dispatch) {
+            setSelectedDriver(dispatch.driver);
+            setSelectedHelper(dispatch.helper || '');
+            setVehicleType(dispatch.vehicleType);
+        }
+    };
 
     // Computed Values
-    const fleet = fleets.find(f => f.plate === selectedPlate) || fleets[0] || { plate: '', type: 'Unknown' };
-    const currentPlate = isOncall ? oncallPlate : fleet.plate;
+    const currentPlate = isOncall ? oncallPlate : selectedPlate;
     const currentDriver = selectedDriver === '__custom__' ? customDriver : selectedDriver;
     const currentHelper = selectedHelper === '__custom__' ? customHelper : selectedHelper;
 
@@ -59,10 +94,19 @@ export default function KasirDashboard() {
     const resetForm = () => {
         setBbm(''); setTol(''); setParkir(''); setParkirLiar('');
         setKuliAngkut(''); setLainLain('');
-        setSelectedDriver(drivers[0] || ''); setCustomDriver('');
-        setSelectedHelper(''); setCustomHelper('');
         setIsOncall(false); setOncallPlate('');
+        setCustomDriver(''); setCustomHelper('');
         setEditingId(null);
+        
+        if (activeDispatches.length > 0) {
+            const first = activeDispatches[0];
+            setSelectedPlate(first.plate);
+            setSelectedDriver(first.driver);
+            setSelectedHelper(first.helper || '');
+        } else {
+            setSelectedDriver(drivers[0] || '');
+            setSelectedHelper('');
+        }
     };
 
     const handleSubmit = async () => {
@@ -83,7 +127,7 @@ export default function KasirDashboard() {
             time: originalEntry ? originalEntry.time : now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             date: originalEntry ? originalEntry.date : now.toISOString().split('T')[0],
             plate: currentPlate,
-            vehicleType: isOncall ? 'Oncall' : fleet.type,
+            vehicleType: isOncall ? 'Oncall' : vehicleType,
             driver: currentDriver,
             isOncall,
             bbm: n(bbm), tol: n(tol), parkir: n(parkir),
@@ -94,11 +138,11 @@ export default function KasirDashboard() {
         const success = await saveEntry(payload);
         if (success) {
             resetForm();
-            fetchToday(); // Refresh data hari ini pas abis input
+            fetchToday(); 
         }
     };
 
-    // 🌟 FUNGSI IMPORT EXCEL (Simulasi API)
+    // FUNGSI IMPORT EXCEL (Simulasi API)
     const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -106,12 +150,10 @@ export default function KasirDashboard() {
         setIsUploading(true);
         if (fileInputRef.current) fileInputRef.current.value = '';
 
-        // Simulasi loading parsing file 2.5 detik
         setTimeout(async () => {
             setIsUploading(false);
             setUploadSuccess(true);
             
-            // Bikin dummy data yang nge-referensi ke data master asli lu
             const dummyEntry: ExpenseEntry = {
                 time: '08:45',
                 date: new Date().toISOString().split('T')[0],
@@ -124,9 +166,8 @@ export default function KasirDashboard() {
                 helperName: 'Helper Import', notes: 'Diimpor dari Excel', total: 560000
             };
 
-            // Nembak ke API backend lu beneran!
             await saveEntry(dummyEntry);
-            fetchToday(); // Langsung update tabel
+            fetchToday(); 
 
             setTimeout(() => setUploadSuccess(false), 3000);
         }, 2500);
@@ -135,7 +176,7 @@ export default function KasirDashboard() {
     const handleEdit = (entry: ExpenseEntry) => {
         setEditingId(entry.id!);
         
-        const isFleetExist = fleets.some(f => f.plate === entry.plate);
+        const isFleetExist = fleets.some(f => f.plate === entry.plate) || activeDispatches.some(d => d.plate === entry.plate);
         if (isFleetExist && !entry.isOncall) { 
             setSelectedPlate(entry.plate); 
             setIsOncall(false); 
@@ -144,12 +185,18 @@ export default function KasirDashboard() {
             setOncallPlate(entry.plate); 
         }
         
-        if (drivers.includes(entry.driver)) { setSelectedDriver(entry.driver); }
-        else { setSelectedDriver('__custom__'); setCustomDriver(entry.driver); }
+        if (drivers.includes(entry.driver) || activeDispatches.some(d => d.driver === entry.driver)) { 
+            setSelectedDriver(entry.driver); 
+        } else { 
+            setSelectedDriver('__custom__'); setCustomDriver(entry.driver); 
+        }
         
         if (!entry.helperName) { setSelectedHelper(''); }
-        else if (drivers.includes(entry.helperName)) { setSelectedHelper(entry.helperName); }
-        else { setSelectedHelper('__custom__'); setCustomHelper(entry.helperName); }
+        else if (drivers.includes(entry.helperName) || activeDispatches.some(d => d.helper === entry.helperName)) { 
+            setSelectedHelper(entry.helperName); 
+        } else { 
+            setSelectedHelper('__custom__'); setCustomHelper(entry.helperName); 
+        }
         
         setBbm(entry.bbm ? String(entry.bbm) : '');
         setTol(entry.tol ? String(entry.tol) : '');
@@ -168,7 +215,7 @@ export default function KasirDashboard() {
     return (
         <div ref={topRef} className="p-6 lg:p-8 relative">
             
-            {/* 🌟 EXCEL UPLOAD LOADING OVERLAY */}
+            {/* EXCEL UPLOAD LOADING OVERLAY */}
             {isUploading && (
                 <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white/60 dark:bg-black/60 backdrop-blur-md animate-[fadeIn_0.3s_ease-out]">
                     <div className="relative">
@@ -180,7 +227,7 @@ export default function KasirDashboard() {
                 </div>
             )}
 
-            {/* 🌟 EXCEL UPLOAD SUCCESS TOAST */}
+            {/* EXCEL UPLOAD SUCCESS TOAST */}
             {uploadSuccess && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-[slideDown_0.4s_ease-out]">
                     <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
@@ -197,7 +244,7 @@ export default function KasirDashboard() {
                 {/* KIRI: Formulir Input */}
                 <div className="flex-1 space-y-8 min-w-0">
                     
-                    {/* 🌟 PAGE TITLE & BUTTON IMPORT EXCEL */}
+                    {/* PAGE TITLE & BUTTON IMPORT EXCEL */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
                         <div>
                             <h1 className="text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
@@ -226,8 +273,8 @@ export default function KasirDashboard() {
                     </div>
 
                     <section className="bg-white dark:bg-[#111111] p-6 lg:p-8 rounded-xl shadow-sm dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)] border border-slate-100 dark:border-white/5 relative">
-                        {/* LOADING OVERLAY JIKA DATA MASTER BELUM SIAP */}
-                        {isMasterLoading && (
+                        {/* LOADING OVERLAY */}
+                        {(isMasterLoading || isLoadingDispatch) && (
                             <div className="absolute inset-0 bg-white/50 dark:bg-[#111]/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
                                 <span className="material-symbols-outlined animate-spin text-primary text-4xl">refresh</span>
                             </div>
@@ -235,7 +282,7 @@ export default function KasirDashboard() {
                         <div className="flex items-center justify-between mb-8">
                             <div className="flex items-center gap-3">
                                 <span className="material-symbols-outlined text-primary text-3xl">local_shipping</span>
-                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Fleet Information</h2>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Active Fleet Information</h2>
                             </div>
                             <label className="flex items-center gap-3 cursor-pointer group z-20">
                                 <input
@@ -259,16 +306,16 @@ export default function KasirDashboard() {
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 px-1">Nopol Armada</label>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 px-1">Pilih Armada (Berangkat Hari Ini)</label>
                                     <div className="relative">
                                         <select
-                                            value={selectedPlate} onChange={e => setSelectedPlate(e.target.value)}
-                                            className="w-full bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-4 px-4 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
+                                            value={selectedPlate} onChange={handlePlateChange}
+                                            className="w-full bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-4 px-4 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
                                         >
-                                            {fleets.map(f => (
-                                                <option key={f.plate} value={f.plate}>{f.plate} — {f.type}</option>
+                                            {activeDispatches.length === 0 && <option value="">Tidak ada rute berjalan hari ini</option>}
+                                            {activeDispatches.map(d => (
+                                                <option key={d.plate} value={d.plate}>{d.plate}</option>
                                             ))}
-                                            {fleets.length === 0 && <option value="">Loading...</option>}
                                         </select>
                                         <span className="material-symbols-outlined absolute right-4 top-4 text-slate-400 pointer-events-none">expand_more</span>
                                     </div>
@@ -280,13 +327,15 @@ export default function KasirDashboard() {
                                     <select
                                         value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-4 px-4 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
+                                        disabled={!isOncall} // Kalo bukan oncall, gabisa diganti manual! (Sesuai VRP)
                                     >
-                                        {drivers.map(name => <option key={name} value={name}>{name}</option>)}
-                                        <option value="__custom__">— Driver Pengganti —</option>
+                                        {!isOncall && <option value={selectedDriver}>{selectedDriver}</option>}
+                                        {isOncall && drivers.map(name => <option key={name} value={name}>{name}</option>)}
+                                        {isOncall && <option value="__custom__">— Driver Pengganti —</option>}
                                     </select>
-                                    <span className="material-symbols-outlined absolute right-4 top-4 text-slate-400 pointer-events-none">expand_more</span>
+                                    {isOncall && <span className="material-symbols-outlined absolute right-4 top-4 text-slate-400 pointer-events-none">expand_more</span>}
                                 </div>
-                                {selectedDriver === '__custom__' && (
+                                {selectedDriver === '__custom__' && isOncall && (
                                     <input type="text" placeholder="Ketik nama driver" value={customDriver} onChange={e => setCustomDriver(e.target.value)}
                                         className="w-full mt-2 bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-3 px-4 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30" />
                                 )}
@@ -297,14 +346,16 @@ export default function KasirDashboard() {
                                     <select
                                         value={selectedHelper} onChange={e => setSelectedHelper(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-4 px-4 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
+                                        disabled={!isOncall} // Kalo bukan oncall, gabisa diganti manual! (Sesuai VRP)
                                     >
-                                        <option value="">— Tidak ada helper —</option>
-                                        {drivers.map(name => <option key={`h-${name}`} value={name}>{name}</option>)}
-                                        <option value="__custom__">— Helper Pengganti —</option>
+                                        {!isOncall && <option value={selectedHelper}>{selectedHelper || 'Tanpa Helper'}</option>}
+                                        {isOncall && <option value="">— Tidak ada helper —</option>}
+                                        {isOncall && drivers.map(name => <option key={`h-${name}`} value={name}>{name}</option>)}
+                                        {isOncall && <option value="__custom__">— Helper Pengganti —</option>}
                                     </select>
-                                    <span className="material-symbols-outlined absolute right-4 top-4 text-slate-400 pointer-events-none">expand_more</span>
+                                    {isOncall && <span className="material-symbols-outlined absolute right-4 top-4 text-slate-400 pointer-events-none">expand_more</span>}
                                 </div>
-                                {selectedHelper === '__custom__' && (
+                                {selectedHelper === '__custom__' && isOncall && (
                                     <input type="text" placeholder="Ketik nama helper" value={customHelper} onChange={e => setCustomHelper(e.target.value)}
                                         className="w-full mt-2 bg-slate-50 dark:bg-[#1A1A1A] border-none rounded-lg py-3 px-4 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/30" />
                                 )}
@@ -546,9 +597,6 @@ export default function KasirDashboard() {
                     </table>
                 </div>
             </section>
-            
-            {/* Modal Detail Biaya */}
-            {/* Modal removed and moved to Sidebar Overlay */}
         </div>
     );
 }

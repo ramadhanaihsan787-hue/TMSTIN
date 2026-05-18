@@ -1,18 +1,56 @@
 // src/features/routes/components/RouteToolbar.tsx
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import { toast } from 'sonner';
 
 interface RouteToolbarProps {
     selectedDate: string;
     onDateChange: (date: string) => void;
     isUploading: boolean;
     onFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    hasRoutes?: boolean; // Penanda kalau hari itu ada rute hasil VRP atau kosong
 }
 
-export default function RouteToolbar({ selectedDate, onDateChange, isUploading, onFileUpload }: RouteToolbarProps) {
+export default function RouteToolbar({ selectedDate, onDateChange, isUploading, onFileUpload, hasRoutes }: RouteToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     const handleUploadClick = () => {
         fileInputRef.current?.click();
+    };
+
+    // 🌟 FUNGSI PENEMBAK TRIGER DOWNLOAD EXCEL ASLI CORPORATE
+    const handleDownloadExcelManifest = async () => {
+        setIsExporting(true);
+        toast.loading("Sedang menyuntikkan data rute ke Template JAPFA Excel...", { id: "export-sj" });
+        
+        try {
+            const token = localStorage.getItem('token');
+            // Nembak ke API FastAPI yang barusan kita buat
+            const response = await fetch(`http://localhost:8000/api/routes/export-excel?date=${selectedDate}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Gagal mengunduh file manifest");
+
+            // Trik javascript biar browser otomatis nge-download filenya
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Surat_Jalan_JAPFA_${selectedDate}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success("Excel Surat Jalan Berhasil Diunduh!", { id: "export-sj" });
+        } catch (error) {
+            console.error(error);
+            toast.error("Gagal membuat laporan Excel perusahaan", { id: "export-sj" });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -23,14 +61,26 @@ export default function RouteToolbar({ selectedDate, onDateChange, isUploading, 
                     type="date" 
                     value={selectedDate} 
                     onChange={(e) => onDateChange(e.target.value)} 
-                    className="px-3 py-2 bg-slate-50 dark:bg-[#111] border border-slate-300 dark:border-[#444] rounded-lg text-sm text-slate-700 dark:text-white outline-none focus:border-primary" 
+                    className="px-3 py-2 bg-slate-50 dark:bg-[#111] border border-slate-300 dark:border-[#444] rounded-lg text-sm text-slate-700 dark:text-white tracking-tight outline-none focus:border-primary" 
                 />
             </div>
             <div className="flex items-center gap-3">
                 <button type="button" className="px-5 py-2.5 bg-white dark:bg-[#1F1F1F] border border-slate-300 dark:border-[#333] text-slate-700 dark:text-white font-bold rounded-lg hover:bg-slate-50 transition-all text-sm flex items-center gap-2">
                     <span className="material-symbols-outlined text-lg text-emerald-600">download</span> Download Delivery Order
                 </button>
-                <button type="button" onClick={handleUploadClick} disabled={isUploading} className="px-5 py-2.5 bg-primary text-white font-bold rounded-lg hover:brightness-110 transition-all text-sm flex items-center gap-2 shadow-lg shadow-primary/20">
+                
+                {/* 🌟 TOMBOL CETAK ASLI EXCEL JAPFA */}
+                <button 
+                    type="button" 
+                    onClick={handleDownloadExcelManifest} 
+                    disabled={isExporting || hasRoutes === false}
+                    className="px-5 py-2.5 bg-amber-500 text-white font-bold rounded-lg hover:brightness-110 transition-all text-sm flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                >
+                    <span className="material-symbols-outlined text-lg">print</span> 
+                    {isExporting ? 'Generating Excel...' : 'Cetak Surat Jalan'}
+                </button>
+
+                <button type="button" onClick={handleUploadClick} disabled={isUploading} className="px-5 py-2.5 bg-primary text-white font-bold rounded-lg hover:brightness-110 transition-all text-sm flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95">
                     <span className="material-symbols-outlined text-lg">upload_file</span> Upload SAP Excel
                 </button>
                 <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx" onChange={onFileUpload} />

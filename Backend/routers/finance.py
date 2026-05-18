@@ -1,13 +1,15 @@
-# routers/finance.py
+# Backend/routers/finance.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, datetime
 import uuid
+import json
+import logging
 
 import models
 import schemas
 from dependencies import get_db, get_current_user, require_role
-import logging
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/finance", tags=["Finance & Expenses"])
@@ -16,16 +18,41 @@ router = APIRouter(prefix="/api/finance", tags=["Finance & Expenses"])
 # HELPER FUNCTIONS
 # ==========================================
 def expense_to_dict(e: models.OperationalExpense) -> dict:
-    """Helper buat mapping data DB ke format Frontend biar DRY"""
+    """Helper buat mapping data DB ke format Frontend biar DRY dengan JSON Serialization Fallback"""
+    plate = "N/A"
+    vehicle_type = "N/A"
+    driver = "N/A"
+    helper = e.helper_name or ""
+    notes = e.notes or ""
+
+    if e.notes:
+        try:
+            # Coba parse notes sebagai JSON block untuk temporary/on-call data
+            notes_data = json.loads(e.notes)
+            if isinstance(notes_data, dict):
+                plate = notes_data.get("plate", "N/A")
+                vehicle_type = notes_data.get("vehicleType", "N/A")
+                driver = notes_data.get("driver", "N/A")
+                helper = notes_data.get("helper", helper)
+                notes = notes_data.get("notes", "")
+        except Exception:
+            # notes bukan JSON, biarkan notes tetap teks biasa
+            pass
+
+    # Fallback ke real DB relationships jika plate/driver masih default N/A
+    if plate == "N/A" and e.vehicle:
+        plate = e.vehicle.license_plate or "N/A"
+        vehicle_type = e.vehicle.type or "CDD"
+    if driver == "N/A" and e.driver:
+        driver = e.driver.name or "N/A"
+
     return {
         "id": e.id,
         "time": e.time,
         "date": str(e.date),
-        # 🌟 FIX CTO: Narik data nyebrang lewat relasi (Ngga Hardcoded)
-        "plate": e.vehicle.license_plate if e.vehicle else "N/A",
-        "vehicleType": e.vehicle.type if e.vehicle else "N/A",
-        "driver": e.driver.name if e.driver else "N/A",
-        
+        "plate": plate,
+        "vehicleType": vehicle_type,
+        "driver": driver,
         "isOncall": e.is_oncall,
         "bbm": e.bbm,
         "tol": e.tol,
@@ -33,9 +60,39 @@ def expense_to_dict(e: models.OperationalExpense) -> dict:
         "parkirLiar": e.parkir_liar,
         "kuliAngkut": e.kuli_angkut,
         "lainLain": e.lain_lain,
-        "helperName": e.helper_name,
-        "notes": e.notes,
+        "helperName": helper,
+        "notes": notes,
         "total": e.total
+    }
+
+# ==========================================
+# MASTER DATA ENDPOINTS
+# ==========================================
+@router.get("/master-data")
+def get_finance_master_data(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Retrieve actual active vehicles and drivers list for cashier drop-downs"""
+    vehicles = db.query(models.FleetVehicle).all()
+    drivers = db.query(models.HRDriver).all()
+    return {
+        "status": "success",
+        "data": {
+            "fleets": [
+                {
+                    "id": v.vehicle_id,
+                    "plate": v.license_plate,
+                    "type": v.type or "CDD"
+                } for v in vehicles
+            ],
+            "drivers": [
+                {
+                    "id": d.driver_id,
+                    "name": d.name
+                } for d in drivers
+            ]
+        }
     }
 
 # 1. BIKIN PENGELUARAN BARU
@@ -46,31 +103,35 @@ def create_expense(
     current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik", "kasir"))
 ):
     try:
+        # 🌟 FIX CTO: Validasi Tipe Data FK Mencegah Postgres DataError
+        # Kalau frontend ngirim string kosong "", "0", atau None, kita jadikan Python None (NULL)
+        safe_vehicle_id = int(data.vehicle_id) if getattr(data, 'vehicle_id', None) else None
+        safe_driver_id = int(data.driver_id) if getattr(data, 'driver_id', None) else None
+
         new_expense = models.OperationalExpense(
-            id=data.id if data.id else str(uuid.uuid4()),
+            id=data.id if getattr(data, 'id', None) else str(uuid.uuid4()),
             time=data.time,
             date=datetime.strptime(data.date, "%Y-%m-%d").date(),
             
-            # 🌟 FIX CTO: Simpan ID relasinya, bukan string manual!
-            vehicle_id=data.vehicle_id,
-            driver_id=data.driver_id,
+            vehicle_id=safe_vehicle_id,
+            driver_id=safe_driver_id,
             
-            is_oncall=data.isOncall,
-            bbm=data.bbm,
-            tol=data.tol,
-            parkir=data.parkir,
-            parkir_liar=data.parkirLiar,
-            kuli_angkut=data.kuliAngkut,
-            lain_lain=data.lainLain,
-            helper_name=data.helperName,
-            notes=data.notes,
-            total=data.total
+            is_oncall=getattr(data, 'isOncall', False),
+            bbm=getattr(data, 'bbm', 0.0) or 0.0,
+            tol=getattr(data, 'tol', 0.0) or 0.0,
+            parkir=getattr(data, 'parkir', 0.0) or 0.0,
+            parkir_liar=getattr(data, 'parkirLiar', 0.0) or 0.0,
+            kuli_angkut=getattr(data, 'kuliAngkut', 0.0) or 0.0,
+            lain_lain=getattr(data, 'lainLain', 0.0) or 0.0,
+            helper_name=getattr(data, 'helperName', ""),
+            notes=getattr(data, 'notes', ""),
+            total=getattr(data, 'total', 0.0) or 0.0
         )
         db.add(new_expense)
         db.commit()
         return {"status": "success", "message": "Biaya operasional berhasil dicatat."}
     except Exception as e:
-        db.rollback()
+        db.rollback() # Wajib ada biar koneksi DB ga nyangkut
         logger.error(f"🚨 [CREATE EXPENSE] DB Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Terjadi kesalahan internal server saat mencatat pengeluaran.")
 
@@ -87,23 +148,26 @@ def update_expense(
         raise HTTPException(status_code=404, detail="Data pengeluaran tidak ditemukan!")
 
     try:
+        # 🌟 FIX CTO: Pelindung Optional Fields
+        safe_vehicle_id = int(data.vehicle_id) if getattr(data, 'vehicle_id', None) else None
+        safe_driver_id = int(data.driver_id) if getattr(data, 'driver_id', None) else None
+
         expense.time = data.time
         expense.date = datetime.strptime(data.date, "%Y-%m-%d").date()
         
-        # 🌟 FIX CTO: Update ID relasinya
-        expense.vehicle_id = data.vehicle_id
-        expense.driver_id = data.driver_id
+        expense.vehicle_id = safe_vehicle_id
+        expense.driver_id = safe_driver_id
         
-        expense.is_oncall = data.isOncall
-        expense.bbm = data.bbm
-        expense.tol = data.tol
-        expense.parkir = data.parkir
-        expense.parkir_liar = data.parkirLiar
-        expense.kuli_angkut = data.kuliAngkut
-        expense.lain_lain = data.lainLain
-        expense.helper_name = data.helperName
-        expense.notes = data.notes
-        expense.total = data.total
+        expense.is_oncall = getattr(data, 'isOncall', False)
+        expense.bbm = getattr(data, 'bbm', 0.0) or 0.0
+        expense.tol = getattr(data, 'tol', 0.0) or 0.0
+        expense.parkir = getattr(data, 'parkir', 0.0) or 0.0
+        expense.parkir_liar = getattr(data, 'parkirLiar', 0.0) or 0.0
+        expense.kuli_angkut = getattr(data, 'kuliAngkut', 0.0) or 0.0
+        expense.lain_lain = getattr(data, 'lainLain', 0.0) or 0.0
+        expense.helper_name = getattr(data, 'helperName', "")
+        expense.notes = getattr(data, 'notes', "")
+        expense.total = getattr(data, 'total', 0.0) or 0.0
         
         db.commit()
         return {"status": "success", "message": "Biaya operasional berhasil diupdate."}
@@ -162,6 +226,11 @@ def delete_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Data pengeluaran tidak ditemukan!")
         
-    db.delete(expense)
-    db.commit()
-    return {"status": "success", "message": "Biaya operasional berhasil dihapus."}
+    try:
+        db.delete(expense)
+        db.commit()
+        return {"status": "success", "message": "Biaya operasional berhasil dihapus."}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"🚨 [DELETE EXPENSE] DB Error untuk ID {expense_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan internal server saat menghapus pengeluaran.")

@@ -164,12 +164,10 @@ export default function RouteDetailPanel({ selectedRoute, isFocusMode, onToggleF
                     )
                 )}
 
+                {/* 🌟 AREA FOOTER: SISA TOMBOL KIRIM HP SUPIR */}
                 <div className="bg-slate-50 dark:bg-[#1A1A1A] p-6 flex items-center justify-end gap-3 border-t border-slate-200 dark:border-[#333] mt-auto">
-                    <button type="button" onClick={() => window.print()} disabled={!selectedRoute} className="px-6 py-2.5 bg-white dark:bg-[#1F1F1F] border border-slate-300 dark:border-[#333] text-slate-700 dark:text-white font-bold rounded-lg hover:bg-slate-100 dark:hover:bg-[#2A2A2A] text-sm flex items-center gap-2 disabled:opacity-50">
-                        <span className="material-symbols-outlined text-lg">picture_as_pdf</span> Cetak Surat Jalan (PDF)
-                    </button>
-                    <button type="button" onClick={() => toast.success(`Jadwal berhasil dikirim ke HP Supir: ${selectedRoute?.driverName || selectedRoute?.driver_name || 'Supir'}!`)} disabled={!selectedRoute} className="px-8 py-2.5 bg-primary text-white font-bold rounded-lg hover:brightness-110 text-sm shadow-lg shadow-primary/25 flex items-center gap-2 disabled:opacity-50">
-                        <span className="material-symbols-outlined text-lg">done_all</span> Kirim ke HP Supir
+                    <button type="button" onClick={() => toast.success(`Jadwal berhasil dikirim ke HP Supir: ${selectedRoute?.driverName || selectedRoute?.driver_name || 'Supir'}!`)} disabled={!selectedRoute} className="w-full sm:w-auto px-8 py-3 bg-primary text-white font-bold rounded-lg hover:brightness-110 text-sm shadow-lg shadow-primary/25 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all">
+                        <span className="material-symbols-outlined text-lg">send_to_mobile</span> Kirim Jadwal ke HP Supir
                     </button>
                 </div>
             </div>

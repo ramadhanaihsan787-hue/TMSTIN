@@ -29,7 +29,8 @@ from database import engine, Base
 from routers import (
     auth as auth_router,
     orders as orders_router,
-    vrp as vrp_router,
+    vrp_jobs as vrp_jobs_router,
+    vrp_routes as vrp_routes_router,
     fleet as fleet_router,
     analytics as analytics_router,
     dashboard as dashboard_router,
@@ -132,7 +133,8 @@ app.openapi = custom_openapi
 # ==========================================
 app.include_router(auth_router.router, tags=["Authentication"])
 app.include_router(orders_router.router, tags=["Orders"])
-app.include_router(vrp_router.router, tags=["VRP & Routes"])
+app.include_router(vrp_jobs_router.router, tags=["VRP Jobs"])
+app.include_router(vrp_routes_router.router, tags=["VRP Routes"])
 app.include_router(fleet_router.router, tags=["Fleet"])
 app.include_router(analytics_router.router, tags=["Analytics"])
 app.include_router(dashboard_router.router, tags=["Dashboard"])

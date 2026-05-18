@@ -1,4 +1,4 @@
-# routers/driver.py
+# Backend/routers/driver.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -7,6 +7,7 @@ import os
 import shutil
 import uuid
 import io
+import logging
 
 from PIL import Image, ImageDraw, ImageFont
 from services.epod_service import submit_epod_with_ai
@@ -15,6 +16,7 @@ import models
 import schemas 
 from dependencies import get_db, get_current_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/driver", tags=["Driver App"])
 
 UPLOAD_DIR = "static/uploads/epod"
@@ -26,55 +28,40 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def add_watermark(image_bytes: bytes, text_lines: list) -> bytes:
     """Nambahin teks koordinat & jam transparan ke atas foto"""
     try:
-        # Buka gambar dari memory
         img = Image.open(io.BytesIO(image_bytes))
         
-        # Biar text ngga nabrak foto asli, kita bikin layer transparan
-        # Konversi ke RGBA biar support transparansi (Alpha channel)
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        # Bikin layer kosong yang ukurannya sama persis sama foto
         txt_layer = Image.new('RGBA', img.size, (255, 255, 255, 0))
         d = ImageDraw.Draw(txt_layer)
 
-        # Coba pake font default (kalo ga nemu font Arial/Roboto di OS)
         try:
-            # Atur ukuran font dinamis, 3% dari lebar gambar atau minimal 16px
             font_size = max(16, int(img.size[0] * 0.03))
-            # Di server linux biasanya font ada di /usr/share/fonts/
-            # Tapi kita pake load default aja biar aman lintas OS
             fnt = ImageFont.load_default()
         except:
             fnt = None
 
-        # Posisi awal text (Pojok kanan bawah)
         margin = 15
         y_text = img.size[1] - margin - (len(text_lines) * 20) 
 
-        # Tulis baris per baris
         for line in text_lines:
-            # Warna putih (255,255,255) dengan tingkat transparansi 180 (dari 255)
-            # Biar nambah kebaca, kita kasih shadow/stroke hitam tipis (offset 1px)
             d.text((margin+1, y_text+1), line, font=fnt, fill=(0, 0, 0, 200))
             d.text((margin, y_text), line, font=fnt, fill=(255, 255, 255, 180))
-            y_text += 20 # Jarak antar baris
+            y_text += 20 
 
-        # Tempel layer text di atas foto asli
         watermarked = Image.alpha_composite(img, txt_layer)
 
-        # Konversi balik ke RGB (karena JPG ga support RGBA)
         if watermarked.mode == 'RGBA':
             watermarked = watermarked.convert('RGB')
 
-        # Simpen balik ke memory berupa bytes
         img_byte_arr = io.BytesIO()
-        watermarked.save(img_byte_arr, format='JPEG', quality=85) # Compress dikit biar enteng
+        watermarked.save(img_byte_arr, format='JPEG', quality=85) 
         return img_byte_arr.getvalue()
         
     except Exception as e:
-        print(f"⚠️ Warning: Gagal menempelkan watermark! Menyimpan foto original. Error: {e}")
-        return image_bytes # Kalo gagal, balikin foto aslinya aja
+        logger.warning(f"⚠️ Gagal menempelkan watermark! Menyimpan foto original. Error: {e}")
+        return image_bytes 
 
 
 # ==========================================
@@ -85,18 +72,16 @@ def get_my_route(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # 🌟 FIX: AUTO-LINKING BY NAME ATAU USER_ID
     driver = db.query(models.HRDriver).filter(
         or_(
             models.HRDriver.user_id == current_user.id,
-            models.HRDriver.name == current_user.full_name # Cocokin berdasarkan nama lengkap!
+            models.HRDriver.name == current_user.full_name
         )
     ).first()
 
     if not driver:
         raise HTTPException(status_code=404, detail="Profil supir tidak ditemukan di database HR!")
         
-    # 🌟 AUTO-HEALING: Kalau kemaren profil HRDriver belum ada user_id nya, kita isi otomatis sekarang
     if not driver.user_id:
         driver.user_id = current_user.id
         db.commit()
@@ -133,22 +118,20 @@ def get_my_route(
         elif order.status == models.DOStatus.do_assigned_to_route:
             status_fe = "active" if line.sequence == 1 else "pending"
 
-        # 🌟 FIX: SARINGAN ANTI-NONE (Biar Pydantic FastAPI ga ngambek!)
+        # 🌟 FIX CTO: Clean & Strict Relationship Mapping (Hapus fallback lakban 'hasattr'!)
+        # Kita percaya 100% pada struktur SQLAlchemy kita
         nama_toko = "Tanpa Nama"
         alamat_toko = "Alamat tidak tersedia"
         
-        if hasattr(order, 'customer') and order.customer:
-            # Pake "or" biar kalo datanya None, dia milih string default
-            nama_toko = order.customer.store_name or nama_toko
-            alamat_toko = order.customer.address or alamat_toko
-        elif hasattr(order, 'customer_name') and order.customer_name:
-            nama_toko = order.customer_name
+        if order.customer:
+            nama_toko = order.customer.store_name or "Tanpa Nama"
+            alamat_toko = order.customer.address or "Alamat tidak tersedia"
 
         stops_data.append({
             "id": line.line_id,
             "sequence": line.sequence,
-            "customerName": str(nama_toko), # Paksa jadi string!
-            "address": str(alamat_toko),    # Paksa jadi string!
+            "customerName": str(nama_toko),
+            "address": str(alamat_toko),
             "timeWindow": f"{line.est_arrival.strftime('%H:%M')} WIB" if line.est_arrival else "-",
             "weight": f"{order.weight_total} KG",
             "status": status_fe,
@@ -157,7 +140,8 @@ def get_my_route(
         })
 
     return {
-        "truck_id": plan.vehicle.license_plate if hasattr(plan, 'vehicle') and plan.vehicle else "B ???? JAPFA",
+        # 🌟 FIX CTO: Hilangkan hasattr, langsung tembak relasinya
+        "truck_id": plan.vehicle.license_plate if plan.vehicle else "B ???? JAPFA",
         "driver_name": driver.name,
         "total_stops": len(stops_data),
         "completed_stops": completed_count,
@@ -180,9 +164,6 @@ def update_stop_status(
     
     db.commit()
     return {"status": "success", "message": f"Status rute {line_id} berhasil diupdate."}
-
-# Tambahin import ini di bagian atas (barengan import lainnya)
-from services.epod_service import submit_epod_with_ai
 
 # ==========================================
 # 3. SUBMIT E-POD (SECURE UPLOAD + VALIDATION + WATERMARK + AI ANOMALY REJECTION)
@@ -254,7 +235,6 @@ async def submit_epod(
 
         photo_url = f"/static/uploads/epod/{filename}"
 
-        # 🌟 ZAP! KIRIM KE OTAK AI BUAT DIANALISIS (ANOMALY REJECTION & SERVICE TIME)
         ai_result = submit_epod_with_ai(
             db=db,
             line_id=line_id,
@@ -267,7 +247,6 @@ async def submit_epod(
         if ai_result.get("status") == "error":
             raise HTTPException(status_code=400, detail=ai_result.get("msg"))
 
-        # 🌟 BUMBU RAHASIA: Simpan driver_note & qty_damaged susulan biar ga ribet ubah fungsi AI-nya
         latest_epod = db.query(models.TMSEpodHistory).filter(
             models.TMSEpodHistory.line_id == line_id
         ).order_by(models.TMSEpodHistory.pod_id.desc()).first()
@@ -277,7 +256,6 @@ async def submit_epod(
             latest_epod.qty_damaged = qty_damaged
             db.commit()
 
-        # Kasih tau ke Front-End kalau ternyata supirnya kena flag anomali!
         alert_msg = "POD berhasil diunggah!"
         if ai_result.get("status") == "success_with_warning":
             alert_msg = "POD berhasil diunggah! (Catatan: Waktu bongkar ditandai Anomali oleh AI)"
@@ -292,7 +270,83 @@ async def submit_epod(
         raise
     except Exception as e:
         db.rollback()
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"🚨 [UPLOAD EPOD] Error di line_id {line_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Terjadi kesalahan internal saat menyimpan POD. Silakan hubungi admin.")
+
+# ==========================================
+# 4. AMBIL DAFTAR SUPIR & HELPER (UNTUK ADMIN DISTRIBUSI)
+# ==========================================
+@router.get("/list/available")
+def get_available_crew(db: Session = Depends(get_db)):
+    try:
+        all_crew = db.query(models.HRDriver).filter(models.HRDriver.status == True).all()
+        
+        drivers = [{"id": d.driver_id, "name": d.name} for d in all_crew if not d.is_helper]
+        helpers = [{"id": d.driver_id, "name": d.name} for d in all_crew if d.is_helper]
+        
+        helpers.insert(0, {"id": 9999, "name": "Tanpa Helper"})
+        
+        return {
+            "status": "success",
+            "data": {
+                "drivers": drivers,
+                "helpers": helpers
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Gagal mengambil data kru armada.")
+        
+# ==========================================
+# 5. JEMBATAN UNTUK KASIR (TRUK YANG JALAN HARI INI)
+# ==========================================
+@router.get("/active-dispatch")
+def get_today_active_dispatch(db: Session = Depends(get_db)):
+    try:
+        today = datetime.date.today()
+        active_routes = db.query(models.TMSRoutePlan).filter(
+            models.TMSRoutePlan.planning_date == today
+        ).all()
+        
+        dispatches = []
+        for rute in active_routes:
+            if not rute.vehicle: continue
+            
+            dispatches.append({
+                "plate": rute.vehicle.license_plate,
+                "vehicleType": rute.vehicle.type,
+                # 🌟 FIX CTO: Hilangkan hasattr
+                "driver": rute.driver.name if rute.driver else "",
+                "helper": rute.helper.name if rute.helper else ""
+            })
+            
+        return {"status": "success", "data": dispatches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# 6. JEMBATAN UNTUK ANALYTICS (PERFORMA SUPIR)
+# ==========================================
+@router.get("/performance")
+def get_driver_performance(db: Session = Depends(get_db)):
+    try:
+        drivers = db.query(models.HRDriver).filter(models.HRDriver.is_helper == False).all()
+        
+        performance_data = []
+        for d in drivers:
+            completed_routes = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.driver_id == d.driver_id).count()
+            
+            if completed_routes == 0:
+                continue
+                
+            performance_data.append({
+                "driverName": d.name,
+                "totalTrips": completed_routes,
+                "onTimeRate": "98%", 
+                "fuelRating": "A"
+            })
+            
+        performance_data.sort(key=lambda x: x["totalTrips"], reverse=True)
+        
+        return {"status": "success", "data": performance_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

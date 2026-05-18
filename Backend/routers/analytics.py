@@ -12,6 +12,8 @@ import schemas
 from dependencies import get_db, get_settings, get_current_user, require_role
 
 from services import analytics_service, driver_performance_service
+from services import kpi_calculator
+from services import metrics_service
 
 # 🌟 FIX CTO: Hapus prefix biar kita bebas bikin 2 pintu masuk di setiap rute!
 router = APIRouter(tags=["Analytics"])
