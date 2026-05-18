@@ -1,4 +1,3 @@
-// src/features/routes/components/TruckList.tsx
 import type { RouteItem, TrafficWarning } from "../types";
 
 // 🌟 FUNGSI WARNA PINDAH KE SINI
@@ -25,7 +24,7 @@ interface Truck3DProps {
     criticalCount: number;
 }
 
-// 🌟 KOMPONEN TRUK 3D KITA UMPETIN DI DALEM FILE INI BIAR RAPI
+// 🌟 KOMPONEN TRUK KITA UMPETIN DI DALEM FILE INI BIAR RAPI
 const Truck3D = ({ plateNumber, driverName, truckType, zone, colorHex, percent, outerText, loadKg, colorClass, isSelected, onClick, warningCount, criticalCount }: Truck3DProps) => {
     return (
         <div onClick={onClick} className={`bg-white dark:bg-[#1F1F1F] p-4 rounded-xl shadow-sm transition-all cursor-pointer relative overflow-visible ${isSelected ? 'border-2 border-primary ring-4 ring-primary/5 shadow-md scale-[1.02]' : 'border border-slate-200 dark:border-[#333] hover:border-primary/50'}`}>
@@ -56,42 +55,48 @@ const Truck3D = ({ plateNumber, driverName, truckType, zone, colorHex, percent, 
                 </div>
                 <div className="flex justify-between text-xs mb-1 relative z-10"><span className="text-slate-400 font-medium uppercase">Current Load</span><span className="font-bold text-white">{loadKg}</span></div>
 
-                {/* ANIMASI 3D TRUK */}
-                <div className="relative w-full h-48 flex items-center justify-center mt-6 overflow-visible scale-110" style={{ perspective: '1200px' }}>
-                    <div style={{ transform: 'rotateX(60deg) rotateZ(45deg)', transformStyle: 'preserve-3d' }} className="w-[240px] h-[72px] relative flex transition-all duration-700 hover:scale-105 cursor-pointer">
-                        <div className="absolute right-0 top-0 w-[180px] h-[72px]" style={{ transformStyle: 'preserve-3d' }}>
-                            <div className="absolute inset-0 bg-slate-900 border-[2px] border-slate-700" style={{ transform: 'translateZ(10px)' }}></div>
-                            <div className="absolute inset-0 border-[3px] border-slate-200" style={{ transform: 'translateZ(80px)', background: `linear-gradient(to right, ${colorHex} 0%, ${colorHex} ${percent}%, #f1f5f9 ${percent}%, #f1f5f9 100%)` }}>
-                                <div className="absolute inset-x-0 top-0 h-full opacity-30" style={{ width: `${percent}%`, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.7) 10px, rgba(255,255,255,0.7) 20px)' }}></div>
+                {/* ANIMASI TRUK FLAT DARI TMSJAPFA-MAIN */}
+                <div className="relative w-full h-36 flex items-center justify-center mt-4">
+                    <div className="relative flex items-end gap-[2px]">
+                        {/* CONTAINER - simple box */}
+                        <div className="relative w-[160px] h-[56px] rounded-md border-2 border-slate-600 overflow-hidden bg-slate-700">
+                            {/* Load fill */}
+                            <div className="absolute inset-0 rounded-sm" style={{ width: `${percent}%`, background: `linear-gradient(135deg, ${colorHex}, ${colorHex}dd)` }}>
+                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(255,255,255,0.5) 6px, rgba(255,255,255,0.5) 12px)' }}></div>
                             </div>
-                            <div className="absolute bottom-0 left-0 w-full h-[70px] origin-bottom border-[3px] border-r-0 border-slate-200 flex items-center shadow-[-5px_5px_20px_rgba(0,0,0,0.5)]" style={{ transform: 'translateZ(10px) rotateX(-90deg)', background: `linear-gradient(to right, ${colorHex} 0%, ${colorHex} ${percent}%, #e2e8f0 ${percent}%, #e2e8f0 100%)` }}>
-                                <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${percent}%`, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.7) 10px, rgba(255,255,255,0.7) 20px)' }}></div>
-                                <span className="text-white font-black text-4xl drop-shadow-md absolute" style={{ left: `calc(${percent}% / 2)`, transform: 'translate(-50%, 0)' }}>{percent}%</span>
+                            {/* Percent label */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-white font-black text-2xl drop-shadow-lg">{percent}%</span>
                             </div>
-                            <div className="absolute top-0 left-0 w-full h-[70px] origin-top bg-slate-300 border-[3px] border-l-0 border-slate-400" style={{ transform: 'translateZ(10px) rotateX(90deg)' }}></div>
-                            <div className="absolute top-0 right-0 w-[70px] h-[72px] origin-right bg-slate-200 border-[3px] border-slate-300 flex flex-col p-[2px] gap-[2px]" style={{ transform: 'translateZ(10px) rotateY(-90deg)' }}>
-                                <div className="flex-1 border-2 border-slate-400 bg-slate-100 flex items-center justify-center"><div className="w-1/2 h-full border-b-[2px] border-slate-300"></div></div>
-                                <div className="flex-1 border-2 border-slate-400 bg-slate-100 flex items-center justify-center"><div className="w-1/2 h-full border-b-[2px] border-slate-300"></div></div>
-                            </div>
-                            <div className="absolute right-[20px] bottom-[-2px] w-[30px] h-[30px] origin-bottom bg-slate-900 rounded-full border-[6px] border-[#222] shadow-xl" style={{ transform: 'rotateX(-90deg) translateZ(-15px)' }}><div className="absolute inset-[2px] bg-slate-400 rounded-full"></div></div>
-                            <div className="absolute right-[70px] bottom-[-2px] w-[30px] h-[30px] origin-bottom bg-slate-900 rounded-full border-[6px] border-[#222] shadow-xl" style={{ transform: 'rotateX(-90deg) translateZ(-15px)' }}><div className="absolute inset-[2px] bg-slate-400 rounded-full"></div></div>
+                            {/* Container rear door lines */}
+                            <div className="absolute left-0 top-0 h-full w-[2px] bg-slate-500"></div>
+                            <div className="absolute left-[3px] top-[25%] h-[50%] w-[1px] bg-slate-500/50"></div>
                         </div>
-                        <div className="absolute left-[10px] top-[4px] w-[40px] h-[64px]" style={{ transformStyle: 'preserve-3d' }}>
-                            <div className="absolute inset-0 bg-slate-800" style={{ transform: 'translateZ(10px)' }}></div>
-                            <div className="absolute inset-0 bg-slate-100 border-[3px] border-slate-300 shadow-inner" style={{ transform: 'translateZ(60px)' }}></div>
-                            <div className="absolute bottom-0 left-0 w-full h-[50px] origin-bottom bg-slate-100 border-[3px] border-slate-300 flex items-start" style={{ transform: 'translateZ(10px) rotateX(-90deg)' }}>
-                                <div className="w-full h-[30px] mt-2 ml-[2px] bg-slate-200 border-[2px] border-slate-400 rounded-sm overflow-hidden relative">
-                                    <div className="w-full h-2/3 bg-slate-800/90 absolute top-0 border-b-2 border-slate-400"></div>
-                                    <div className="w-2 h-[2px] bg-slate-500 absolute bottom-1 right-1"></div>
-                                </div>
+                        {/* CAB - bus head shape */}
+                        <div className="relative w-[48px] h-[48px] bg-slate-300 border-2 border-slate-600 rounded-r-xl rounded-l-sm overflow-hidden flex flex-col">
+                            {/* Windshield */}
+                            <div className="mx-[4px] mt-[4px] h-[22px] bg-sky-900/80 rounded-tr-lg rounded-sm border border-slate-500">
+                                <div className="absolute top-[5px] right-[7px] w-[14px] h-[1px] bg-sky-300/40"></div>
                             </div>
-                            <div className="absolute top-0 left-0 w-full h-[50px] origin-top bg-slate-300 border-[3px] border-slate-400" style={{ transform: 'translateZ(10px) rotateX(90deg)' }}></div>
-                            <div className="absolute top-0 left-0 w-[50px] h-[64px] origin-left bg-slate-200 border-[3px] border-slate-300" style={{ transform: 'translateZ(10px) rotateY(90deg)' }}>
-                                <div className="absolute right-[2px] top-[4px] w-[26px] h-[50px] bg-slate-800/90 rounded-sm border-2 border-slate-700 shadow-inner"></div>
+                            {/* Body */}
+                            <div className="flex-1 flex items-end justify-between px-[5px] pb-[3px]">
+                                {/* Headlight */}
+                                <div className={`w-[6px] h-[6px] rounded-full ${isSelected ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)] animate-pulse' : 'bg-amber-600/60'}`}></div>
+                                {/* Bumper line */}
+                                <div className="w-[16px] h-[3px] bg-slate-500 rounded-full"></div>
                             </div>
-                            <div className="absolute left-[5px] bottom-[-2px] w-[30px] h-[30px] origin-bottom bg-slate-900 rounded-full border-[6px] border-[#222] shadow-xl" style={{ transform: 'rotateX(-90deg) translateZ(-15px)' }}><div className="absolute inset-[2px] bg-slate-400 rounded-full"></div></div>
                         </div>
-                        <div className="absolute -bottom-8 -left-4 w-[110%] h-16 bg-black/40 blur-xl rounded-full" style={{ transform: 'rotateX(80deg) translateZ(-20px)' }}></div>
+                        {/* Wheels under container */}
+                        <div className="absolute -bottom-[8px] left-[16px] flex gap-[6px]">
+                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
+                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
+                        </div>
+                        {/* Wheels under cab */}
+                        <div className="absolute -bottom-[8px] right-[14px]">
+                            <div className="w-[14px] h-[14px] rounded-full bg-slate-900 border-[3px] border-slate-600 shadow-md"></div>
+                        </div>
+                        {/* Shadow */}
+                        <div className="absolute -bottom-[14px] left-0 w-full h-[6px] bg-black/30 blur-md rounded-full"></div>
                     </div>
                 </div>
             </div>
