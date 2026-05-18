@@ -55,8 +55,8 @@ services:
       TOMTOM_API_KEY: ${TOMTOM_API_KEY:-your-tomtom-api-key-here}
       
       # 🌟 VRP Configuration
-      depo_lat: -6.2234
-      depo_lon: 106.5123
+      depo_lat: ${depo_lat}
+      depo_lon: ${depo_lon}
       vrp_start_time: "07:00"
       vrp_end_time: "17:00"
       vrp_base_drop_time_mins: 15

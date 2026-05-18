@@ -10,8 +10,6 @@ import {
     TrendingDown,
     Minus
 } from 'lucide-react';
-
-// 🌟 IMPORT API KITA! (Pastiin path-nya bener ya Bos)
 import { api } from '../../../shared/services/apiClient';
 
 export default function ReturnDashboard() {
@@ -19,7 +17,6 @@ export default function ReturnDashboard() {
     const [openActionId, setOpenActionId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // 🌟 1. STATES BUAT NAMPUNG DATA REAL
     const [summaryData, setSummaryData] = useState({
         qualityKg: 0, qualityRupiah: 0, qualityTrend: 0,
         skuKg: 0, skuRupiah: 0, skuTrend: 0,
@@ -28,36 +25,32 @@ export default function ReturnDashboard() {
     });
 
     const [donutData, setDonutData] = useState({
-        qualityPercent: 0,
-        skuPercent: 0,
-        custPercent: 0
+        qualityPercent: 0, skuPercent: 0, custPercent: 0
     });
 
     const [fleetIncidentData, setFleetIncidentData] = useState<any[]>([]);
     const [auditData, setAuditData] = useState<any[]>([]);
 
-    // 🌟 2. MESIN PENYEDOT DATA DARI BACKEND
     useEffect(() => {
         const fetchReturnData = async () => {
             try {
-                // Kita siapin endpoint /analytics/returns-dashboard yang nanti kita bikin di Backend
                 const response = await api.get('/analytics/returns-dashboard');
                 const resData = response.data;
 
                 if (resData.status === "success") {
-                    setSummaryData(resData.data.summary || {
+                    setSummaryData(resData.data?.summary || {
                         qualityKg: 0, qualityRupiah: 0, qualityTrend: 0,
                         skuKg: 0, skuRupiah: 0, skuTrend: 0,
                         custKg: 0, custRupiah: 0, custTrend: 0,
                         totalReturnKg: 0
                     });
                     
-                    setDonutData(resData.data.distribution || {
+                    setDonutData(resData.data?.distribution || {
                         qualityPercent: 0, skuPercent: 0, custPercent: 0
                     });
 
-                    setFleetIncidentData(resData.data.fleet_performance || []);
-                    setAuditData(resData.data.audit_logs || []);
+                    setFleetIncidentData(resData.data?.fleet_performance || []);
+                    setAuditData(resData.data?.audit_logs || []);
                 }
             } catch (error) {
                 console.error("Gagal narik data Return Dashboard:", error);
@@ -69,7 +62,6 @@ export default function ReturnDashboard() {
         fetchReturnData();
     }, []);
 
-    // 🌟 HELPER FORMATTER
     const formatNumber = (num: number) => new Intl.NumberFormat('en-US').format(num);
     const formatCurrency = (num: number) => {
         if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -77,153 +69,148 @@ export default function ReturnDashboard() {
         return num.toString();
     };
 
-    // 🌟 HELPER RENDER TREND
     const renderTrend = (value: number) => {
-        if (value > 0) return <><TrendingUp className="w-3 h-3 mr-1" /> {value}%</>;
-        if (value < 0) return <><TrendingDown className="w-3 h-3 mr-1" /> {Math.abs(value)}%</>;
-        return <><Minus className="w-3 h-3 mr-1" /> Stable</>;
+        if (value > 0) return <><span className="material-symbols-outlined text-xs mr-0.5">arrow_upward</span> {value}% vs last month</>;
+        if (value < 0) return <><span className="material-symbols-outlined text-xs mr-0.5">arrow_downward</span> {Math.abs(value)}% vs last month</>;
+        return <>Stable vs last month</>;
     };
 
     const getTrendColor = (value: number, invertBadGood = false) => {
-        // Return rate naik = JELEK (Merah), Return rate turun = BAGUS (Hijau)
         if (value > 0) return invertBadGood ? "text-green-500 bg-green-50 dark:bg-green-500/10" : "text-red-500 bg-red-50 dark:bg-red-500/10";
         if (value < 0) return invertBadGood ? "text-red-500 bg-red-50 dark:bg-red-500/10" : "text-green-500 bg-green-50 dark:bg-green-500/10";
         return "text-gray-500 bg-gray-50 dark:bg-gray-800";
     };
 
     return (
-        <div className={`space-y-8 transition-opacity duration-500 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
-            
-            {/* 1. TOP ROW: SUMMARY CARDS */}
+        <div className={`space-y-8 animate-fadeIn transition-opacity duration-500 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
+            {/* 1. Top Row: Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                {/* Quality Issues Card */}
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 flex flex-col hover:border-japfa-orange transition-all group">
+                {/* Quality Issues */}
+                <div className="bg-white dark:bg-card-dark p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 hover:border-japfa-orange/50 transition-colors">
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-black text-japfa-gray dark:text-gray-400 uppercase tracking-[0.15em]">Quality Standard Issues</span>
-                            <span className="text-[9px] bg-orange-100 dark:bg-orange-500/20 text-japfa-orange px-2 py-0.5 rounded font-black self-start uppercase">Production Dept</span>
+                            <span className="text-xs font-bold text-japfa-gray dark:text-gray-400 uppercase tracking-wider">Quality Standard Issues</span>
+                            <span className="text-[10px] bg-orange-100 dark:bg-orange-500/20 text-japfa-orange px-2 py-0.5 rounded font-bold self-start uppercase">Production</span>
                         </div>
-                        <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-japfa-orange rounded-lg group-hover:scale-110 transition-transform">
+                        <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-japfa-orange rounded-lg">
                             <span className="material-symbols-outlined text-xl">high_quality</span>
                         </div>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <h3 className="text-3xl font-black text-japfa-dark dark:text-white tracking-tight">{formatNumber(summaryData.qualityKg)} KG</h3>
+                        <h3 className="text-3xl font-extrabold text-japfa-dark dark:text-white">{formatNumber(summaryData.qualityKg)} KG</h3>
                         <div className="flex items-center gap-2">
-                            <p className="text-lg font-black text-japfa-orange">IDR {formatCurrency(summaryData.qualityRupiah)}</p>
-                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md flex items-center shadow-sm ${getTrendColor(summaryData.qualityTrend)}`}>
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center ${getTrendColor(summaryData.qualityTrend)}`}>
                                 {renderTrend(summaryData.qualityTrend)}
                             </span>
                         </div>
                     </div>
-                    <p className="mt-4 text-[11px] text-japfa-gray dark:text-gray-500 italic border-t border-gray-50 dark:border-white/5 pt-3 font-medium">Physical damage or contamination</p>
+                    <p className="mt-4 text-xs text-japfa-gray dark:text-gray-400 italic border-t border-gray-50 dark:border-white/5 pt-3">Physical damage or contamination</p>
                 </div>
 
-                {/* SKU Mismatch Card */}
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 flex flex-col hover:border-japfa-navy transition-all group">
+                {/* SKU Mismatch */}
+                <div className="bg-white dark:bg-card-dark p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 hover:border-blue-500/50 transition-colors">
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-black text-japfa-gray dark:text-gray-400 uppercase tracking-[0.15em]">Mismatched SKU</span>
-                            <span className="text-[9px] bg-slate-100 dark:bg-slate-500/20 text-japfa-slate dark:text-japfa-gray px-2 py-0.5 rounded font-black self-start uppercase">Warehouse Dept</span>
+                            <span className="text-xs font-bold text-japfa-gray dark:text-gray-400 uppercase tracking-wider">Mismatched SKU</span>
+                            <span className="text-[10px] bg-slate-100 dark:bg-slate-500/20 text-japfa-slate dark:text-japfa-gray px-2 py-0.5 rounded font-bold self-start uppercase">Warehouse</span>
                         </div>
-                        <div className="p-2 bg-slate-50 dark:bg-slate-500/10 text-japfa-navy dark:text-blue-400 rounded-lg group-hover:scale-110 transition-transform">
+                        <div className="p-2 bg-slate-50 dark:bg-slate-500/10 text-japfa-navy dark:text-blue-400 rounded-lg">
                             <span className="material-symbols-outlined text-xl">category</span>
                         </div>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <h3 className="text-3xl font-black text-japfa-dark dark:text-white tracking-tight">{formatNumber(summaryData.skuKg)} KG</h3>
+                        <h3 className="text-3xl font-extrabold text-japfa-dark dark:text-white">{formatNumber(summaryData.skuKg)} KG</h3>
                         <div className="flex items-center gap-2">
-                            <p className="text-lg font-black text-japfa-orange">IDR {formatCurrency(summaryData.skuRupiah)}</p>
-                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md flex items-center shadow-sm ${getTrendColor(summaryData.skuTrend)}`}>
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center ${getTrendColor(summaryData.skuTrend)}`}>
                                 {renderTrend(summaryData.skuTrend)}
                             </span>
                         </div>
                     </div>
-                    <p className="mt-4 text-[11px] text-japfa-gray dark:text-gray-500 italic border-t border-gray-50 dark:border-white/5 pt-3 font-medium">Incorrect product picker error rate</p>
+                    <p className="mt-4 text-xs text-japfa-gray dark:text-gray-400 italic border-t border-gray-50 dark:border-white/5 pt-3">Incorrect product delivered</p>
                 </div>
 
-                {/* Customer Rejection Card */}
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 flex flex-col hover:border-red-500 transition-all group">
+                {/* Customer Rejection */}
+                <div className="bg-white dark:bg-card-dark p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 hover:border-red-500/50 transition-colors">
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-black text-japfa-gray dark:text-gray-400 uppercase tracking-[0.15em]">Customer Rejection</span>
-                            <span className="text-[9px] bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-0.5 rounded font-black self-start uppercase">Transporter Dept</span>
+                            <span className="text-xs font-bold text-japfa-gray dark:text-gray-400 uppercase tracking-wider">Customer Rejection</span>
+                            <span className="text-[10px] bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-0.5 rounded font-bold self-start uppercase">Transporter</span>
                         </div>
-                        <div className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg group-hover:scale-110 transition-transform">
+                        <div className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg">
                             <span className="material-symbols-outlined text-xl">person_off</span>
                         </div>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <h3 className="text-3xl font-black text-japfa-dark dark:text-white tracking-tight">{formatNumber(summaryData.custKg)} KG</h3>
+                        <h3 className="text-3xl font-extrabold text-japfa-dark dark:text-white">{formatNumber(summaryData.custKg)} KG</h3>
                         <div className="flex items-center gap-2">
-                            <p className="text-lg font-black text-japfa-orange">IDR {formatCurrency(summaryData.custRupiah)}</p>
-                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md flex items-center shadow-sm ${getTrendColor(summaryData.custTrend)}`}>
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center ${getTrendColor(summaryData.custTrend)}`}>
                                 {renderTrend(summaryData.custTrend)}
                             </span>
                         </div>
                     </div>
-                    <p className="mt-4 text-[11px] text-japfa-gray dark:text-gray-500 italic border-t border-gray-50 dark:border-white/5 pt-3 font-medium">Delivery window missed or store closed</p>
+                    <p className="mt-4 text-xs text-japfa-gray dark:text-gray-400 italic border-t border-gray-50 dark:border-white/5 pt-3">Delivery window or slot missed</p>
                 </div>
             </div>
 
-            {/* 2. MIDDLE SECTION: DONUT CHART & FLEET PERFORMANCE */}
+            {/* 2. Middle Section: Donut Chart & Leaderboard */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
-                {/* Donut Chart (MATH LOGIC APPLIED 🧠) */}
-                <div className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/10">
-                    <h2 className="text-xl font-black text-japfa-dark dark:text-white mb-1 uppercase tracking-tight">Return Causes Distribution</h2>
-                    <p className="text-[11px] text-japfa-gray dark:text-gray-500 font-bold uppercase tracking-widest mb-8">Weight percentage analysis by root cause</p>
+                {/* Donut Chart with Math Logic */}
+                <div className="bg-white dark:bg-card-dark p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
+                    <h2 className="text-xl font-bold text-japfa-dark dark:text-white mb-1">Return Causes Distribution</h2>
+                    <p className="text-sm text-japfa-gray dark:text-gray-400 font-medium mb-8">Breakdown of return reasons by total weight percentage</p>
                     <div className="flex flex-col items-center">
                         <div className="relative w-56 h-56 mb-8">
                             <svg className="w-full h-full transform -rotate-90 drop-shadow-md" viewBox="0 0 36 36">
                                 <circle className="stroke-gray-100 dark:stroke-white/5" cx="18" cy="18" r="15.9155" fill="transparent" strokeWidth="3"></circle>
-                                {/* Quality Segment */}
+                                
+                                {/* Dynamic SVG Segments */}
                                 <circle className="stroke-japfa-orange transition-all duration-1000" cx="18" cy="18" r="15.9155" fill="transparent" strokeWidth="5" 
                                     strokeDasharray={`${donutData.qualityPercent} ${100 - donutData.qualityPercent}`} strokeDashoffset="0"></circle>
-                                {/* SKU Mismatch Segment */}
                                 <circle className="stroke-japfa-navy dark:stroke-blue-400 transition-all duration-1000" cx="18" cy="18" r="15.9155" fill="transparent" strokeWidth="5" 
                                     strokeDasharray={`${donutData.skuPercent} ${100 - donutData.skuPercent}`} strokeDashoffset={`-${donutData.qualityPercent}`}></circle>
-                                {/* Customer Rejection Segment */}
                                 <circle className="stroke-japfa-gray dark:stroke-gray-600 transition-all duration-1000" cx="18" cy="18" r="15.9155" fill="transparent" strokeWidth="5" 
                                     strokeDasharray={`${donutData.custPercent} ${100 - donutData.custPercent}`} strokeDashoffset={`-${donutData.qualityPercent + donutData.skuPercent}`}></circle>
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-4xl font-black text-japfa-dark dark:text-white">{formatCurrency(summaryData.totalReturnKg)}</span>
-                                <span className="text-[10px] font-black text-japfa-gray dark:text-gray-500 uppercase tracking-widest mt-1">Total KG</span>
+                                <span className="text-3xl font-extrabold text-japfa-dark dark:text-white">{formatCurrency(summaryData.totalReturnKg)}</span>
+                                <span className="text-[10px] font-bold text-japfa-gray dark:text-gray-400 uppercase tracking-widest mt-1">Total KG</span>
                             </div>
                         </div>
                         
-                        <div className="w-full max-w-sm space-y-3">
-                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-950 rounded-lg border border-gray-100 dark:border-white/5 transition-all hover:translate-x-1">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-3 h-3 rounded-full bg-japfa-orange shadow-[0_0_8px_rgba(242,140,56,0.5)]"></span>
-                                    <span className="text-xs font-black text-japfa-gray dark:text-gray-400 uppercase tracking-tighter">Quality Issues</span>
+                        <div className="w-full max-sm mb-4">
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-sidebar rounded-lg border border-gray-100 dark:border-white/5 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-3 h-3 rounded-full bg-japfa-orange"></span>
+                                        <span className="text-sm font-semibold text-japfa-gray dark:text-gray-400">Quality Issues</span>
+                                    </div>
+                                    <span className="text-md font-bold text-japfa-dark dark:text-white">{donutData.qualityPercent}%</span>
                                 </div>
-                                <span className="text-md font-black text-japfa-dark dark:text-white">{donutData.qualityPercent}%</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-950 rounded-lg border border-gray-100 dark:border-white/5 transition-all hover:translate-x-1">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-3 h-3 rounded-full bg-japfa-navy dark:bg-blue-400"></span>
-                                    <span className="text-xs font-black text-japfa-gray dark:text-gray-400 uppercase tracking-tighter">Mismatched SKU</span>
+                                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-sidebar rounded-lg border border-gray-100 dark:border-white/5 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-3 h-3 rounded-full bg-japfa-navy dark:bg-blue-400"></span>
+                                        <span className="text-sm font-semibold text-japfa-gray dark:text-gray-400">Mismatched SKU</span>
+                                    </div>
+                                    <span className="text-md font-bold text-japfa-dark dark:text-white">{donutData.skuPercent}%</span>
                                 </div>
-                                <span className="text-md font-black text-japfa-dark dark:text-white">{donutData.skuPercent}%</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-950 rounded-lg border border-gray-100 dark:border-white/5 transition-all hover:translate-x-1">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-3 h-3 rounded-full bg-japfa-gray dark:bg-gray-600"></span>
-                                    <span className="text-xs font-black text-japfa-gray dark:text-gray-400 uppercase tracking-tighter">Cust. Rejection</span>
+                                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-sidebar rounded-lg border border-gray-100 dark:border-white/5 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-3 h-3 rounded-full bg-japfa-gray dark:bg-gray-600"></span>
+                                        <span className="text-sm font-semibold text-japfa-gray dark:text-gray-400">Cust. Rejection</span>
+                                    </div>
+                                    <span className="text-md font-bold text-japfa-dark dark:text-white">{donutData.custPercent}%</span>
                                 </div>
-                                <span className="text-md font-black text-japfa-dark dark:text-white">{donutData.custPercent}%</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Fleet Performance List */}
-                <div className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/10">
-                    <h2 className="text-xl font-black text-japfa-dark dark:text-white mb-1 uppercase tracking-tight">Fleet Incident Performance</h2>
-                    <p className="text-[11px] text-japfa-gray dark:text-gray-500 font-bold uppercase tracking-widest mb-6">Units with highest return impact</p>
+                <div className="bg-white dark:bg-sidebar p-8 rounded-xl shadow-sm border border-gray-100 dark:border-white/10">
+                    <h2 className="text-xl font-bold text-japfa-dark dark:text-white mb-1">Fleet Performance</h2>
+                    <p className="text-sm text-japfa-gray dark:text-gray-400 font-medium mb-6">Top vehicles by incident count and weight impact</p>
                     
                     {fleetIncidentData.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-[200px] text-gray-400">
@@ -233,30 +220,22 @@ export default function ReturnDashboard() {
                     ) : (
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             {fleetIncidentData.map((fleet, idx) => (
-                                <div key={idx} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                                    idx === 0 
-                                    ? 'bg-orange-50/50 dark:bg-orange-500/5 border-orange-100 dark:border-orange-500/20 shadow-sm' 
-                                    : 'bg-white dark:bg-slate-950 border-gray-100 dark:border-white/5 hover:border-gray-200 dark:hover:border-white/20'
-                                }`}>
+                                <div key={idx} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${idx === 0 ? 'bg-orange-50/50 dark:bg-orange-500/5 border-orange-100 dark:border-orange-500/20' : 'bg-white dark:bg-sidebar border-gray-100 dark:border-white/5 hover:border-gray-200 dark:hover:border-white/20'}`}>
                                     <div className="flex items-center gap-4">
-                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
-                                            idx === 0 ? 'bg-japfa-orange text-white shadow-md shadow-japfa-orange/30' : 'bg-gray-100 dark:bg-white/10 text-japfa-gray dark:text-gray-400'
-                                        }`}>{idx + 1}</span>
+                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-japfa-orange text-white' : 'bg-gray-100 dark:bg-white/10 text-japfa-gray dark:text-gray-400'}`}>{idx + 1}</span>
                                         <div>
-                                            <p className="font-black text-japfa-dark dark:text-white text-lg tracking-tight">{fleet.plate}</p>
-                                            <p className="text-[10px] text-japfa-gray dark:text-gray-500 uppercase font-black">{fleet.count} Incidents • This Month</p>
+                                            <p className="font-bold text-japfa-dark dark:text-white text-lg tracking-tight">{fleet.plate}</p>
+                                            <p className="text-[11px] text-japfa-gray dark:text-gray-500 uppercase font-bold">{fleet.count} Incidents This Month</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-japfa-dark dark:text-white">{fleet.weight} KG</p>
-                                        <div className={`text-[10px] font-black flex items-center justify-end gap-1 ${
-                                            fleet.trend === 'up' ? 'text-red-500' : fleet.trend === 'down' ? 'text-green-500' : 'text-japfa-gray'
-                                        }`}>
+                                        <p className="text-lg font-extrabold text-japfa-dark dark:text-white">{fleet.weight} KG</p>
+                                        <p className={`text-[10px] font-bold flex items-center justify-end gap-1 ${fleet.trend === 'up' ? 'text-red-500' : fleet.trend === 'down' ? 'text-green-500' : 'text-japfa-gray dark:text-gray-500'}`}>
                                             <span className="material-symbols-outlined text-xs">
-                                                {fleet.trend === 'up' ? 'trending_up' : fleet.trend === 'down' ? 'trending_down' : 'horizontal_rule'}
+                                                {fleet.trend === 'up' ? 'trending_up' : fleet.trend === 'down' ? 'trending_down' : 'trending_flat'}
                                             </span>
-                                            {fleet.percent}
-                                        </div>
+                                            {fleet.percent} vs last month
+                                        </p>
                                     </div>
                                 </div>
                             ))}
@@ -265,39 +244,20 @@ export default function ReturnDashboard() {
                 </div>
             </div>
 
-            {/* 3. BOTTOM SECTION: AUDIT TABLE */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 overflow-hidden">
+            {/* 3. Bottom Section: Audit Table (Ditambahin Style Baru Temen Lu `bg-card-dark`) */}
+            <div className="bg-white dark:bg-card-dark rounded-xl shadow-sm border border-gray-100 dark:border-white/10 overflow-hidden">
                 <div className="p-6 border-b border-gray-100 dark:border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div>
-                        <h3 className="text-lg font-black text-japfa-dark dark:text-white uppercase tracking-tight">Historical Return Audit</h3>
-                        <p className="text-[10px] font-bold text-japfa-gray uppercase tracking-[0.15em] mt-1">Transaction-level accountability log</p>
+                        <h3 className="text-lg font-bold text-japfa-dark dark:text-white">Historical Return Audit</h3>
+                        <p className="text-sm text-japfa-gray dark:text-gray-400">Transaction-level accountability log</p>
                     </div>
                     <div className="flex gap-2">
-                        <div className="relative">
-                            <button 
-                                onClick={() => setIsFilterOpen(!isFilterOpen)} 
-                                className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-black text-japfa-gray uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 transition-all active:scale-95"
-                            >
-                                <Filter className="w-3.5 h-3.5" /> Filter
-                            </button>
-                            {isFilterOpen && (
-                                <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-900 border border-gray-100 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
-                                    <div className="p-3 border-b border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-                                        <p className="text-[10px] font-black text-japfa-gray uppercase tracking-widest">Filter By Status</p>
-                                    </div>
-                                    <div className="p-2 flex flex-col gap-1">
-                                        {['Resolved', 'Investigating', 'Pending'].map(stat => (
-                                            <label key={stat} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                                                <input type="checkbox" className="rounded text-japfa-orange focus:ring-japfa-orange border-gray-300 dark:border-gray-700" />
-                                                <span className="text-xs font-bold text-japfa-gray dark:text-gray-400">{stat}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <button className="px-4 py-2 bg-japfa-navy dark:bg-blue-600 text-white rounded-lg text-xs font-black uppercase tracking-widest hover:bg-japfa-dark transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95">
-                            <Download className="w-3.5 h-3.5" /> Export PDF
+                        {/* Tombol Filter dan Export dibiarin sama */}
+                        <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-bold text-japfa-gray hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 transition-all">
+                            <Filter className="w-4 h-4" /> Filter
+                        </button>
+                        <button className="px-4 py-2 bg-japfa-navy dark:bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-japfa-dark transition-all flex items-center gap-2 shadow-sm">
+                            <Download className="w-4 h-4" /> Export PDF
                         </button>
                     </div>
                 </div>
@@ -305,77 +265,39 @@ export default function ReturnDashboard() {
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1000px]">
                         <thead>
-                            <tr className="bg-gray-50/50 dark:bg-white/5 border-b border-gray-100 dark:border-white/10">
+                            <tr className="bg-gray-50/50 dark:bg-sidebar border-b border-gray-100 dark:border-white/10">
                                 {['Date', 'Customer', 'Batch ID', 'Product', 'Weight', 'Return Reason', 'Status', 'Action'].map((h) => (
-                                    <th key={h} className="py-4 px-6 text-[10px] font-black text-japfa-orange uppercase tracking-widest">{h}</th>
+                                    <th key={h} className="py-4 px-6 text-xs font-bold text-japfa-gray dark:text-gray-400 uppercase tracking-wider">{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                             {auditData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="py-12 text-center">
-                                        <div className="flex flex-col items-center justify-center text-gray-400">
-                                            <span className="material-symbols-outlined text-4xl mb-2 opacity-50">search_off</span>
-                                            <p className="text-sm font-bold">Data Audit Kosong / Belum ada Retur</p>
-                                        </div>
+                                    <td colSpan={8} className="py-12 text-center text-gray-400 text-sm font-bold">
+                                        Data Audit Kosong / Belum ada Retur
                                     </td>
                                 </tr>
                             ) : (
                                 auditData.map((row, idx) => (
                                     <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
                                         <td className="py-4 px-6 text-[11px] font-bold text-japfa-gray dark:text-gray-400">{row.date}</td>
-                                        <td className="py-4 px-6">
-                                            <p className="font-black text-japfa-dark dark:text-white text-sm">{row.customer}</p>
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <span className="font-mono text-[10px] font-bold text-japfa-gray bg-gray-100 dark:bg-white/5 px-2 py-1 rounded">
-                                                {row.id}
-                                            </span>
-                                        </td>
-                                        <td className="py-4 px-6 text-[11px] font-bold text-japfa-dark dark:text-gray-300">{row.product}</td>
-                                        <td className="py-4 px-6 font-black text-japfa-dark dark:text-white">{row.weight}</td>
-                                        <td className="py-4 px-6 text-[11px] font-medium italic text-japfa-gray dark:text-gray-500">{row.reason}</td>
+                                        <td className="py-4 px-6"><p className="font-bold text-japfa-dark dark:text-white text-sm">{row.customer}</p></td>
+                                        <td className="py-4 px-6"><span className="font-mono text-[10px] text-japfa-gray bg-gray-100 dark:bg-white/5 px-2 py-1 rounded">{row.id}</span></td>
+                                        <td className="py-4 px-6 text-[11px] text-japfa-dark dark:text-gray-300">{row.product}</td>
+                                        <td className="py-4 px-6 font-bold text-japfa-dark dark:text-white">{row.weight}</td>
+                                        <td className="py-4 px-6 text-[11px] italic text-japfa-gray dark:text-gray-500">{row.reason}</td>
                                         <td className="py-4 px-6 text-center">
-                                            <span className={`px-2.5 py-1 text-[9px] font-black rounded-full uppercase tracking-tighter ${row.color}`}>
-                                                {row.status}
-                                            </span>
+                                            <span className={`px-2.5 py-1 text-[9px] font-bold rounded-full uppercase tracking-wider ${row.color}`}>{row.status}</span>
                                         </td>
-                                        <td className="py-4 px-6 text-right relative">
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); setOpenActionId(openActionId === idx ? null : idx); }}
-                                                className="px-3 py-1.5 bg-japfa-orange/10 dark:bg-japfa-orange/20 text-japfa-orange text-[10px] font-black rounded hover:bg-japfa-orange hover:text-white transition-all flex items-center gap-1 ml-auto active:scale-95"
-                                            >
-                                                DETAILS <ChevronDown className={`w-3 h-3 transition-transform ${openActionId === idx ? 'rotate-180' : ''}`} />
-                                            </button>
-                                            
-                                            {openActionId === idx && (
-                                                <div className="absolute right-6 top-12 w-48 bg-white dark:bg-slate-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200">
-                                                    <div className="p-1" role="menu">
-                                                        <button className="w-full text-left px-4 py-2.5 text-[11px] font-black text-japfa-dark dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 uppercase tracking-wider transition-colors">
-                                                            <Eye className="w-3.5 h-3.5 text-blue-500" /> View Report
-                                                        </button>
-                                                        <button className="w-full text-left px-4 py-2.5 text-[11px] font-black text-japfa-dark dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 uppercase tracking-wider transition-colors">
-                                                            <FileText className="w-3.5 h-3.5 text-orange-500" /> Download PDF
-                                                        </button>
-                                                        <div className="h-px bg-gray-100 dark:bg-white/5 my-1"></div>
-                                                        <button className="w-full text-left px-4 py-2.5 text-[11px] font-black text-japfa-orange hover:bg-orange-50 dark:hover:bg-orange-500/10 flex items-center gap-3 uppercase tracking-wider transition-colors">
-                                                            <RefreshCcw className="w-3.5 h-3.5" /> Re-Process
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
+                                        <td className="py-4 px-6 text-right">
+                                            <button className="text-japfa-orange text-[10px] font-bold hover:underline">DETAILS</button>
                                         </td>
                                     </tr>
                                 ))
                             )}
                         </tbody>
                     </table>
-                </div>
-                <div className="p-6 bg-gray-50 dark:bg-white/5 border-t border-gray-100 dark:border-white/10 flex justify-center">
-                    <button className="text-[10px] font-black text-japfa-gray hover:text-japfa-orange uppercase tracking-[0.2em] transition-colors flex items-center gap-2">
-                        View All Audit Records <ChevronDown className="w-3 h-3" />
-                    </button>
                 </div>
             </div>
         </div>

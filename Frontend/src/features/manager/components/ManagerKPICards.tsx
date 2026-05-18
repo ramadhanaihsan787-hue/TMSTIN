@@ -2,7 +2,7 @@ import type { KPICardData } from '../types';
 
 export default function KPICard({ label, value, change, trend, icon, bgColor, iconColor, subtext }: KPICardData) {
     return (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 hover:shadow-md transition-all group hover:border-japfa-orange/30">
+        <div className="bg-white dark:bg-card-dark p-6 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 hover:shadow-md transition-all group hover:border-japfa-orange/30">
             {/* Upper Row: Label & Animated Icon */}
             <div className="flex justify-between items-start mb-4">
                 <span className="text-[10px] font-black text-japfa-gray dark:text-gray-400 uppercase tracking-[0.15em]">
