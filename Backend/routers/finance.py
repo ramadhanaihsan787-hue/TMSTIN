@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, datetime
 import uuid
+import json
 
 import models
 import schemas
@@ -16,16 +17,41 @@ router = APIRouter(prefix="/api/finance", tags=["Finance & Expenses"])
 # HELPER FUNCTIONS
 # ==========================================
 def expense_to_dict(e: models.OperationalExpense) -> dict:
-    """Helper buat mapping data DB ke format Frontend biar DRY"""
+    """Helper buat mapping data DB ke format Frontend biar DRY dengan JSON Serialization Fallback"""
+    plate = "N/A"
+    vehicle_type = "N/A"
+    driver = "N/A"
+    helper = e.helper_name or ""
+    notes = e.notes or ""
+
+    if e.notes:
+        try:
+            # Coba parse notes sebagai JSON block untuk temporary/on-call data
+            notes_data = json.loads(e.notes)
+            if isinstance(notes_data, dict):
+                plate = notes_data.get("plate", "N/A")
+                vehicle_type = notes_data.get("vehicleType", "N/A")
+                driver = notes_data.get("driver", "N/A")
+                helper = notes_data.get("helper", helper)
+                notes = notes_data.get("notes", "")
+        except Exception:
+            # notes bukan JSON, biarkan notes tetap teks biasa
+            pass
+
+    # Fallback ke real DB relationships jika plate/driver masih default N/A
+    if plate == "N/A" and e.vehicle:
+        plate = e.vehicle.license_plate or "N/A"
+        vehicle_type = e.vehicle.type or "CDD"
+    if driver == "N/A" and e.driver:
+        driver = e.driver.name or "N/A"
+
     return {
         "id": e.id,
         "time": e.time,
         "date": str(e.date),
-        # 🌟 FIX CTO: Narik data nyebrang lewat relasi (Ngga Hardcoded)
-        "plate": e.vehicle.license_plate if e.vehicle else "N/A",
-        "vehicleType": e.vehicle.type if e.vehicle else "N/A",
-        "driver": e.driver.name if e.driver else "N/A",
-        
+        "plate": plate,
+        "vehicleType": vehicle_type,
+        "driver": driver,
         "isOncall": e.is_oncall,
         "bbm": e.bbm,
         "tol": e.tol,
@@ -33,9 +59,39 @@ def expense_to_dict(e: models.OperationalExpense) -> dict:
         "parkirLiar": e.parkir_liar,
         "kuliAngkut": e.kuli_angkut,
         "lainLain": e.lain_lain,
-        "helperName": e.helper_name,
-        "notes": e.notes,
+        "helperName": helper,
+        "notes": notes,
         "total": e.total
+    }
+
+# ==========================================
+# MASTER DATA ENDPOINTS
+# ==========================================
+@router.get("/master-data")
+def get_finance_master_data(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Retrieve actual active vehicles and drivers list for cashier drop-downs"""
+    vehicles = db.query(models.FleetVehicle).all()
+    drivers = db.query(models.HRDriver).all()
+    return {
+        "status": "success",
+        "data": {
+            "fleets": [
+                {
+                    "id": v.vehicle_id,
+                    "plate": v.license_plate,
+                    "type": v.type or "CDD"
+                } for v in vehicles
+            ],
+            "drivers": [
+                {
+                    "id": d.driver_id,
+                    "name": d.name
+                } for d in drivers
+            ]
+        }
     }
 
 # 1. BIKIN PENGELUARAN BARU

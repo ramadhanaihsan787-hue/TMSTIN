@@ -8,8 +8,8 @@ export const useExpenses = () => {
     const [entries, setEntries] = useState<ExpenseEntry[]>([]);
     
     // 🌟 STATE BUAT MASTER DATA
-    const [fleets, setFleets] = useState<{plate: string, type: string}[]>([]);
-    const [drivers, setDrivers] = useState<string[]>([]);
+    const [fleets, setFleets] = useState<{id: number, plate: string, type: string}[]>([]);
+    const [drivers, setDrivers] = useState<{id: number, name: string}[]>([]);
     
     const [isLoading, setIsLoading] = useState(false);
     const [isMasterLoading, setIsMasterLoading] = useState(false);

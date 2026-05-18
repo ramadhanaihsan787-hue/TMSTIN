@@ -97,9 +97,9 @@ def upgrade():
             VALUES (1)
         """)
         
-        print("✅ Tabel system_settings berhasil dibuat dengan default values!")
+        print("[OK] Tabel system_settings berhasil dibuat dengan default values!")
     else:
-        print("⚠️  Tabel system_settings sudah ada, skip creation")
+        print("[WARN] Tabel system_settings sudah ada, skip creation")
 
 
 def downgrade():
@@ -122,4 +122,4 @@ def downgrade():
         batch_op.drop_column('city')
         batch_op.drop_column('district')
     
-    print("✅ Rollback berhasil!")
+    print("[OK] Rollback berhasil!")

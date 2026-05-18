@@ -2,6 +2,8 @@
 
 export interface ExpenseEntry {
     id?: string;
+    vehicle_id?: number | null;
+    driver_id?: number | null;
     time: string;
     date: string;
     plate: string;

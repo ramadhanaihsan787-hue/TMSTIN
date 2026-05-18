@@ -2,7 +2,6 @@ import { useSettings } from '../hooks';
 
 // 🌟 IMPORT SEMUA KOMPONEN UI YANG UDAH KITA PECAH
 import {
-    SettingsHeader,
     SettingsTabs,
     VrpSettings,
     CostSettings,
@@ -51,11 +50,8 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* Komponen Header Khusus Settings */}
-            <SettingsHeader />
-
             {/* Content Area */}
-            <div className="p-4 md:p-8 max-w-6xl mx-auto w-full flex-1 flex flex-col">
+            <div className="p-4 md:p-8 w-full flex-1 flex flex-col">
                 
                 {/* Komponen Tab Navigasi */}
                 <SettingsTabs activeTab={activeTab} setActiveTab={setActiveTab} />

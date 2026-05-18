@@ -5,20 +5,9 @@ import type { ExpenseEntry } from '../types';
 export const financeService = {
     // 🌟 SUNTIKAN BARU: Tarik Master Data Truk & Driver
     getMasterData: async () => {
-        // 🌟 FIX CTO: Udah ditambahin /api/ 
-        const [fleetRes, driverRes] = await Promise.all([
-            api.get('/api/fleet/vehicles').catch(() => ({ data: { data: [] } })),
-            api.get('/api/hr/drivers').catch(() => ({ data: { data: [] } }))
-        ]);
-        
-        // Normalisasi data biar UI ga bingung
-        const fleets = (fleetRes.data.data || []).map((v: any) => ({
-            plate: v.license_plate || v.plate,
-            type: v.type || v.vehicle_type || 'CDD'
-        }));
-        
-        const drivers = (driverRes.data.data || []).map((d: any) => d.name);
-        
+        const res = await api.get('/api/finance/master-data').catch(() => ({ data: { data: { fleets: [], drivers: [] } } }));
+        const fleets = res.data?.data?.fleets || [];
+        const drivers = res.data?.data?.drivers || [];
         return { fleets, drivers };
     },
 

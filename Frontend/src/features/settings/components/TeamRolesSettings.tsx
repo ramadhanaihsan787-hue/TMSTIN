@@ -24,33 +24,9 @@ export default function TeamRolesSettings() {
 
     return (
         <div className="animate-fadeIn space-y-8 pb-10">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-                <div>
-                    <h3 className="text-2xl md:text-3xl font-black tracking-tighter text-on-surface">Manage Team</h3>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-lg text-sm">
-                        Control access levels and manage permissions for all logistics personnel across the global supply chain.
-                    </p>
-                </div>
-                <button className="flex items-center gap-2 bg-gradient-to-r from-[#994700] to-[#FF7A00] text-white px-6 py-2.5 rounded-lg font-bold text-sm tracking-tight shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all shrink-0">
-                    <span className="material-symbols-outlined text-sm">person_add</span>
-                    Add Member
-                </button>
-            </div>
-
             {/* Stats Bento */}
             <div className="grid grid-cols-12 gap-6">
-                <div className="col-span-12 md:col-span-4 bg-white dark:bg-[#111111] p-6 rounded-xl border border-slate-200 dark:border-[#333] shadow-sm">
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Total Personnel</p>
-                    <div className="flex items-baseline gap-3">
-                        <span className="text-4xl font-black text-on-surface">128</span>
-                        <span className="text-xs font-bold text-blue-500 flex items-center gap-0.5">
-                            <span className="material-symbols-outlined text-sm">trending_up</span>
-                            +4 this month
-                        </span>
-                    </div>
-                </div>
-                <div className="col-span-12 md:col-span-4 bg-white dark:bg-[#111111] p-6 rounded-xl border border-slate-200 dark:border-[#333] shadow-sm">
+                <div className="col-span-12 md:col-span-6 bg-white dark:bg-[#111111] p-6 rounded-xl border border-slate-200 dark:border-[#333] shadow-sm">
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Active Drivers</p>
                     <div className="flex items-baseline gap-3">
                         <span className="text-4xl font-black text-on-surface">84</span>
@@ -59,7 +35,7 @@ export default function TeamRolesSettings() {
                         </div>
                     </div>
                 </div>
-                <div className="col-span-12 md:col-span-4 bg-white dark:bg-[#111111] p-6 rounded-xl border border-slate-200 dark:border-[#333] shadow-sm">
+                <div className="col-span-12 md:col-span-6 bg-white dark:bg-[#111111] p-6 rounded-xl border border-slate-200 dark:border-[#333] shadow-sm">
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">System Roles</p>
                     <div className="flex gap-1.5 mt-2">
                         {['LA', 'DR', 'PA'].map((label) => (
