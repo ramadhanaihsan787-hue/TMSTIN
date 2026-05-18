@@ -7,6 +7,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 # 🌟 INISIALISASI LOGGER
 logger = logging.getLogger(__name__)
 
+# 🌟 FIX CTO: CORS headers harus ikut di setiap error response!
+# Tanpa ini, browser memblokir error response dan menampilkan "CORS error"
+# padahal sebenarnya itu 401/500/dll.
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
+
 def setup_exception_handlers(app: FastAPI):
     
     # 1. Nangkep Error HTTP biasa (Misal 404, 400, 401)
@@ -20,6 +30,7 @@ def setup_exception_handlers(app: FastAPI):
                 "code": exc.status_code, 
                 "message": exc.detail
             },
+            headers=CORS_HEADERS,
         )
 
     # 2. Nangkep Error Validasi Pydantic (Misal password kurang panjang, email salah format)
@@ -34,6 +45,7 @@ def setup_exception_handlers(app: FastAPI):
                 "message": "Data yang dikirim tidak valid!", 
                 "details": exc.errors()
             },
+            headers=CORS_HEADERS,
         )
 
     # 3. Nangkep Error 500 (Fatal Crash di Server)
@@ -48,4 +60,5 @@ def setup_exception_handlers(app: FastAPI):
                 "code": 500, 
                 "message": "Terjadi kesalahan internal pada server. Silakan hubungi admin."
             },
+            headers=CORS_HEADERS,
         )
