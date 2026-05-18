@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Header from "../../../shared/components/Header";
 import { podService, type PodRecord } from "../services/podService";
+import { PodSignatureModal, RejectVerificationModal } from "../components";
 
 export default function Verifications() {
     const [loading, setLoading] = useState(true);
@@ -361,112 +362,27 @@ export default function Verifications() {
 
             {/* Signature Modal */}
             {showSignature && selectedRecord && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary">draw</span>
-                                Tanda Tangan Driver
-                            </h3>
-                            <button
-                                onClick={() => setShowSignature(false)}
-                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 flex flex-col items-center">
-                            <div className="w-full h-40 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 flex items-center justify-center relative mb-4">
-                                {/* Simulated Signature */}
-                                <span className="text-4xl font-serif text-slate-400 dark:text-slate-600 italic select-none">{selectedRecord.driver_name}</span>
-                                <div className="absolute bottom-2 right-2 text-[10px] text-slate-400">Digital Signature</div>
-                            </div>
-                            <div className="text-center">
-                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{selectedRecord.driver_name}</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">Vehicle: {selectedRecord.vehicle_plate} ({selectedRecord.vehicle_type})</p>
-                                <p className="text-[10px] text-slate-400">Timestamp: {selectedRecord.timestamp || "Baru saja"}</p>
-                            </div>
-                        </div>
-                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex justify-end">
-                            <button
-                                onClick={() => setShowSignature(false)}
-                                className="px-4 py-2 bg-primary text-white text-xs font-bold rounded hover:bg-primary/90 transition-colors cursor-pointer active:scale-95"
-                            >
-                                Tutup
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <PodSignatureModal
+                    driverName={selectedRecord.driver_name}
+                    vehiclePlate={selectedRecord.vehicle_plate}
+                    vehicleType={selectedRecord.vehicle_type}
+                    timestamp={selectedRecord.timestamp}
+                    onClose={() => setShowSignature(false)}
+                />
             )}
 
             {/* Reject Modal */}
             {showRejectModal && selectedRecord && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-red-500">cancel</span>
-                                Tolak / Verifikasi Manual e-POD
-                            </h3>
-                            <button
-                                onClick={() => setShowRejectModal(false)}
-                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <form onSubmit={handleRejectSubmit}>
-                            <div className="p-6 space-y-4">
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Masukkan alasan penolakan dokumen e-POD untuk Surat Jalan <span className="font-bold text-slate-700 dark:text-slate-300">{selectedRecord.order_id}</span>. Supir akan menerima notifikasi dan harus mengunggah ulang.
-                                </p>
-                                
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Alasan Utama</label>
-                                    <select
-                                        value={rejectReason}
-                                        onChange={(e) => setRejectReason(e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold focus:ring-primary focus:border-primary"
-                                        required
-                                    >
-                                        <option value="">-- Pilih Alasan --</option>
-                                        <option value="Foto Buram / Tidak Terbaca">Foto Buram / Tidak Terbaca</option>
-                                        <option value="Tanda Tangan Tidak Sesuai">Tanda Tangan Tidak Sesuai</option>
-                                        <option value="Kuantitas GR Tidak Sesuai">Kuantitas GR Tidak Sesuai</option>
-                                        <option value="Dokumen Salah / Tertukar">Dokumen Salah / Tertukar</option>
-                                        <option value="Lainnya">Lainnya</option>
-                                    </select>
-                                </div>
-                                
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Catatan Tambahan (Opsional)</label>
-                                    <textarea
-                                        value={rejectNotes}
-                                        onChange={(e) => setRejectNotes(e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs focus:ring-primary focus:border-primary h-20 resize-none"
-                                        placeholder="Tulis detail catatan tambahan untuk supir..."
-                                    />
-                                </div>
-                            </div>
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowRejectModal(false)}
-                                    className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer active:scale-95"
-                                >
-                                    Batal
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={submitting}
-                                    className="px-4 py-2 bg-red-500 text-white text-xs font-bold rounded hover:bg-red-600 transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
-                                >
-                                    {submitting ? "Memproses..." : "Tolak POD"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <RejectVerificationModal
+                    orderId={selectedRecord.order_id}
+                    rejectReason={rejectReason}
+                    setRejectReason={setRejectReason}
+                    rejectNotes={rejectNotes}
+                    setRejectNotes={setRejectNotes}
+                    submitting={submitting}
+                    onClose={() => setShowRejectModal(false)}
+                    onSubmit={handleRejectSubmit}
+                />
             )}
         </>
     );
