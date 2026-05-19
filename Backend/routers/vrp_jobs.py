@@ -1,5 +1,5 @@
 # Backend/routers/vrp_jobs.py
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 import datetime
 import uuid
 import logging
@@ -10,6 +10,7 @@ from services import vrp_service
 from services import osrm_service, eta_service, zoning_service
 from dependencies import get_settings, require_role
 from services import traffic_validator
+from main import limiter  # 🌟 Import limiter untuk gembok CPU Monster
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["VRP AI Jobs & Optimization"])
@@ -170,10 +171,43 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         db.close() 
 
 # ==========================================
-# 2. ENDPOINT MINTA TIKET & POLLING VRP
+# 2. ENDPOINT: TRIGGER VRP / SPATIAL PREVIEW
+# ==========================================
+@router.post("/routes/spatial-preview")
+def trigger_spatial_preview(
+    preview: bool = False,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: SessionLocal = Depends(get_settings) # Sesuaikan dependency jika perlu
+):
+    # 1. Bikin ID unik untuk tracking job-nya
+    job_id = str(uuid.uuid4())
+    
+    # 2. Daftarkan job ke dictionary global
+    VRP_JOBS[job_id] = {
+        "status": "processing",
+        "progress": 0,
+        "phase": "init",
+        "message": "Menyiapkan antrean optimasi rute...",
+        "updated_at": str(datetime.datetime.now())
+    }
+    
+    # 3. Lempar proses beratnya ke background
+    background_tasks.add_task(run_vrp_optimization_task, job_id, preview)
+    
+    # 4. Langsung kasih respon ke frontend (nggak perlu nunggu AI selesai)
+    return {
+        "message": "Proses VRP AI dimulai...",
+        "job_id": job_id,
+        "status": "processing"
+    }
+
+# ==========================================
+# 2. ENDPOINT MINTA TIKET & POLLING VRP (DILIMIT BIAR CPU AMAN)
 # ==========================================
 @router.post("/routes/optimize/start")
+@limiter.limit("10/hour")
 def start_optimize_routes(
+    request: Request,
     background_tasks: BackgroundTasks,
     preview: bool = False,
     current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
@@ -208,24 +242,53 @@ def start_traffic_validation(
         raise HTTPException(400, "VRP belum selesai atau job tidak ditemukan")
     
     TRAFFIC_JOBS[job_id] = {"status": "processing"}
-    background_tasks.add_task(_run_traffic_validation, job_id, vrp_result)
+    background_tasks.add_task(_run_traffic_validation, job_id)
     return {"status": "success", "message": "Traffic validation dimulai"}
 
-def _run_traffic_validation(job_id: str, vrp_result: dict):
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    routes = vrp_result["data"]["jadwal_truk_internal"]
-    all_warnings = []
-    
-    for route in routes:
-        result = traffic_validator.validate_route_traffic(route, today)
-        all_warnings.extend(result.get("warnings", []))
-    
-    TRAFFIC_JOBS[job_id] = {
-        "status": "completed",
-        "total_warnings": len(all_warnings),
-        "critical_count": sum(1 for w in all_warnings if w["severity"] == "HIGH"),
-        "warnings": all_warnings,
-    }
+def _run_traffic_validation(job_id: str):
+    """
+    Background traffic validation worker
+    """
+    global TRAFFIC_JOBS
+
+    try:
+        TRAFFIC_JOBS[job_id]["status"] = "processing"
+        vrp_job = VRP_JOBS.get(job_id)
+
+        if not vrp_job:
+            TRAFFIC_JOBS[job_id] = {
+                "status": "failed",
+                "message": "VRP Job tidak ditemukan"
+            }
+            return
+
+        routes = vrp_job["data"]["jadwal_truk_internal"]
+        today = str(datetime.date.today())
+        all_warnings = []
+
+        for route in routes:
+            result = traffic_validator.validate_route_traffic(route, today)
+            if result.get("warnings"):
+                all_warnings.extend(result["warnings"])
+
+        TRAFFIC_JOBS[job_id] = {
+            "status": "completed",
+            "warnings": all_warnings,
+            "critical_count": len([
+                w for w in all_warnings
+                if w.get("severity") == "HIGH"
+            ])
+        }
+        print(f"✅ Traffic validation selesai untuk Job {job_id}")
+
+    except Exception as e:
+        print(f"🚨 TRAFFIC VALIDATION FAILED: {str(e)}")
+        TRAFFIC_JOBS[job_id] = {
+            "status": "failed",
+            "message": str(e),
+            "warnings": [],
+            "critical_count": 0
+        }
 
 @router.get("/routes/validate-traffic/{job_id}/status")
 def get_traffic_validation_status(job_id: str):

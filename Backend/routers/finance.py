@@ -35,16 +35,17 @@ def expense_to_dict(e: models.OperationalExpense) -> dict:
                 driver = notes_data.get("driver", "N/A")
                 helper = notes_data.get("helper", helper)
                 notes = notes_data.get("notes", "")
-        except Exception:
-            # notes bukan JSON, biarkan notes tetap teks biasa
-            pass
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Gagal parse notes JSON untuk expense {e.id}: {str(e)}"
+            )
 
     # Fallback ke real DB relationships jika plate/driver masih default N/A
     if plate == "N/A" and e.vehicle:
         plate = e.vehicle.license_plate or "N/A"
-        vehicle_type = e.vehicle.type or "CDD"
+        vehicle_type = getattr(e.vehicle, "type", "CDD") or "CDD"
     if driver == "N/A" and e.driver:
-        driver = e.driver.name or "N/A"
+        driver = getattr(e.driver, "name", "N/A") or "N/A"
 
     return {
         "id": e.id,
@@ -190,14 +191,28 @@ def get_expenses(
         try:
             start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
             query = query.filter(models.OperationalExpense.date >= start_d)
-        except: pass
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Invalid start_date filter: {start_date}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Format start_date harus YYYY-MM-DD"
+            )
         
     if end_date:
         try:
             end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
             query = query.filter(models.OperationalExpense.date <= end_d)
-        except: pass
-        
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Invalid end_date filter: {end_date}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Format end_date harus YYYY-MM-DD"
+            )
+
     expenses = query.order_by(models.OperationalExpense.created_at.desc()).all()
     
     results = [expense_to_dict(e) for e in expenses]

@@ -1,8 +1,4 @@
-"""
-TMS JAPFA Backend - Main Application Entry Point
-Arsitektur sudah dirapikan oleh CTO. Urutan inisialisasi:
-1. Imports -> 2. FastAPI Init -> 3. Middleware (CORS & Rate Limit) -> 4. Static & Routers
-"""
+# Backend/main.py
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,12 +6,15 @@ from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 import os
 
-# 🌟 IMPORT SATPAM ANTI-DDoS (SLOWAPI)
+# 🌟 1. IMPORT SATPAM ANTI-DDoS (SLOWAPI)
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# 🌟 FIX CTO POINT 5: CRON SERVICE IMPORT (Supaya main.py bersih)
+# 🌟 2. INISIALISASI LIMITER DI SINI (Wajib sebelum import routers biar gak Circular Import!)
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
+# FIX CTO POINT 5: CRON SERVICE IMPORT (Supaya main.py bersih)
 from services.cron_service import start_system_scheduler
 
 # Core & Config
@@ -25,7 +24,7 @@ from core.exceptions import setup_exception_handlers
 # Database
 from database import engine, Base
 
-# Routers
+# 🌟 3. BARU KITA IMPORT ROUTERS AMAN JAYA
 from routers import (
     auth as auth_router,
     orders as orders_router,
@@ -64,10 +63,8 @@ async def lifespan(app: FastAPI):
 
 
 # ==========================================
-# 2. INITIALIZE APP & RATE LIMITER (SATPAM)
+# 2. INITIALIZE APP
 # ==========================================
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
-
 app = FastAPI(
     title=settings.APP_NAME,
     description=settings.APP_DESCRIPTION,
@@ -143,6 +140,7 @@ app.include_router(customer_router.router, tags=["Customers"])
 app.include_router(driver_router.router, tags=["Drivers"])
 app.include_router(finance_router.router, tags=["Finance & Expenses"])
 app.include_router(tracking_router.router, tags=["Tracking"])
+
 # ==========================================
 # 6. SYSTEM ENDPOINTS
 # ==========================================

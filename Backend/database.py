@@ -1,19 +1,47 @@
 """
 Database module - SQLAlchemy configuration and session management
 """
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-# 🌟 UBAH: Import 'settings' dari core.config
 from core.config import settings
 
-# 🌟 UBAH: Panggil DATABASE_URL dari dalem objek settings
-# Create database engine
-engine = create_engine(settings.DATABASE_URL)
+# ==========================================
+# 🌟 DATABASE ENGINE WITH CONNECTION POOLING
+# ==========================================
+engine = create_engine(
+    settings.DATABASE_URL,
 
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # ==========================================
+    # 🌟 CONNECTION POOL SETTINGS
+    # ==========================================
+    pool_pre_ping=True,     # Cek koneksi sebelum dipakai
+    pool_recycle=3600,      # Refresh koneksi tiap 1 jam
 
-# Create base class for models
+    # ==========================================
+    # 🌟 POOL SIZE
+    # ==========================================
+    pool_size=10,           # Jumlah koneksi standby
+    max_overflow=20,        # Extra koneksi saat spike traffic
+
+    # ==========================================
+    # 🌟 DEBUG
+    # ==========================================
+    echo=False
+)
+
+# ==========================================
+# 🌟 SESSION FACTORY
+# ==========================================
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+# ==========================================
+# 🌟 BASE MODEL
+# ==========================================
 Base = declarative_base()

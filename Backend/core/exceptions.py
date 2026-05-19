@@ -16,9 +16,12 @@ def setup_exception_handlers(app: FastAPI):
         return JSONResponse(
             status_code=exc.status_code,
             content={
-                "status": "error", 
-                "code": exc.status_code, 
-                "message": exc.detail
+                "success": False,
+                "error": {
+                    "code": exc.status_code,
+                    "message": exc.detail,
+                    "details": None
+                }
             },
         )
 
@@ -29,10 +32,12 @@ def setup_exception_handlers(app: FastAPI):
         return JSONResponse(
             status_code=422,
             content={
-                "status": "error", 
-                "code": 422, 
-                "message": "Data yang dikirim tidak valid!", 
-                "details": exc.errors()
+                "success": False,
+                "error": {
+                    "code": 422,
+                    "message": "Data yang dikirim tidak valid!",
+                    "details": exc.errors()
+                }
             },
         )
 
@@ -44,8 +49,11 @@ def setup_exception_handlers(app: FastAPI):
         return JSONResponse(
             status_code=500,
             content={
-                "status": "error", 
-                "code": 500, 
-                "message": "Terjadi kesalahan internal pada server. Silakan hubungi admin."
+                "success": False,
+                "error": {
+                    "code": 500,
+                    "message": "Terjadi kesalahan internal pada server. Silakan hubungi admin.",
+                    "details": None
+                }
             },
         )

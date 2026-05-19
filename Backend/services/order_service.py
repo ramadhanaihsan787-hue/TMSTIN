@@ -14,6 +14,38 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+VALID_TRANSITIONS = {
+    models.DOStatus.so_waiting_verification: [
+        models.DOStatus.do_verified
+    ],
+
+    models.DOStatus.do_verified: [
+        models.DOStatus.do_assigned_to_route
+    ],
+
+    models.DOStatus.do_assigned_to_route: [
+        models.DOStatus.delivered_pod_uploaded,
+        models.DOStatus.cancelled
+    ],
+
+    models.DOStatus.delivered_pod_uploaded: [
+        models.DOStatus.delivered_success,
+        models.DOStatus.delivered_partial,
+        models.DOStatus.do_assigned_to_route
+    ],
+
+    models.DOStatus.delivered_success: [
+        models.DOStatus.billed
+    ],
+
+    models.DOStatus.delivered_partial: [
+        models.DOStatus.billed
+    ],
+
+    models.DOStatus.cancelled: [],
+    models.DOStatus.billed: []
+}
+
 # ==========================================
 # 🌟 CUSTOM EXCEPTIONS
 # ==========================================
@@ -69,13 +101,31 @@ class OrderService:
         ).all()
     
     @staticmethod
-    def update_order_status(db: Session, order_id: str, status: models.DOStatus) -> models.DeliveryOrder:
-        order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == order_id).first()
+    def update_order_status(
+        db: Session,
+        order_id: str,
+        status: models.DOStatus
+    ) -> models.DeliveryOrder:
+
+        order = db.query(models.DeliveryOrder).filter(
+            models.DeliveryOrder.order_id == order_id
+        ).first()
+
         if not order:
-            raise OrderNotFoundError(f"Order '{order_id}' tidak ditemukan.")
-            
+            raise OrderNotFoundError(
+                f"Order '{order_id}' tidak ditemukan."
+            )
+
+        allowed = VALID_TRANSITIONS.get(order.status, [])
+
+        if status not in allowed:
+            raise OrderValidationError(
+                f"Invalid status transition: "
+                f"{order.status.value} → {status.value}"
+            )
+
         order.status = status
-        db.flush() # 🌟 Upgrade
+        db.flush()
         return order
     
     @staticmethod

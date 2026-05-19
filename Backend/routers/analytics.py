@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse 
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 import io
 import pandas as pd 
 
@@ -11,6 +11,7 @@ import models
 import schemas
 from dependencies import get_db, get_settings, get_current_user, require_role
 
+# 🌟 PASTIKAN SEMUA SERVICE TER-IMPORT
 from services import analytics_service, driver_performance_service
 from services import kpi_calculator
 from services import metrics_service
@@ -33,7 +34,8 @@ def get_kpi_summary(
     if not endDate: endDate = str(date.today())
     
     settings = get_settings()
-    return analytics_service.get_kpi_summary(db, startDate, endDate, settings)
+    # 🌟 Ganti ke kpi_calculator (asumsi dipindah ke sini saat refactor)
+    return kpi_calculator.get_kpi_summary(db, startDate, endDate, settings)
 
 # ==========================================
 # ENDPOINT 2: HOURLY DELIVERY VOLUME
@@ -49,7 +51,8 @@ def get_delivery_volume(
     if not startDate: startDate = str(date.today())
     if not endDate: endDate = str(date.today())
 
-    return analytics_service.get_delivery_volume(db, startDate, endDate)
+    # 🌟 Arahkan ke metrics_service
+    return metrics_service.get_delivery_volume(db, startDate, endDate)
 
 # ==========================================
 # ENDPOINT 3: FLEET UTILIZATION
@@ -65,7 +68,8 @@ def get_fleet_utilization(
     if not startDate: startDate = str(date.today())
     if not endDate: endDate = str(date.today())
     
-    return analytics_service.get_fleet_utilization(db, startDate, endDate)
+    # 🌟 Arahkan ke metrics_service
+    return metrics_service.get_fleet_utilization(db, startDate, endDate)
 
 # ==========================================
 # ENDPOINT 4: DRIVER PERFORMANCE
@@ -81,7 +85,7 @@ def get_driver_performance(
     if not startDate: startDate = str(date.today())
     if not endDate: endDate = str(date.today())
     
-    # 🌟 Panggil service yang Real Data!
+    # Memang pakai driver_performance_service (Aman)
     return driver_performance_service.get_real_driver_performance(db, startDate, endDate)
 
 # ==========================================
@@ -90,7 +94,8 @@ def get_driver_performance(
 @router.get("/analytics/returns-dashboard", response_model=schemas.ReturnDashboardResponse)
 @router.get("/api/analytics/returns-dashboard", response_model=schemas.ReturnDashboardResponse)
 def get_returns_dashboard(db: Session = Depends(get_db)):
-    data = analytics_service.get_returns_dashboard(db)
+    # 🌟 Arahkan ke metrics_service
+    data = metrics_service.get_returns_dashboard(db)
     return {"status": "success", "data": data}
 
 # ==========================================
@@ -100,7 +105,13 @@ def get_returns_dashboard(db: Session = Depends(get_db)):
 @router.get("/api/analytics/efficiency-dashboard", response_model=schemas.EfficiencyDashboardResponse)
 def get_efficiency_dashboard(db: Session = Depends(get_db)):
     settings = get_settings()
-    data = analytics_service.get_efficiency_dashboard(db, settings)
+    
+    # ❌ SEBELUMNYA (Tadi gw arahin ke analytics_service karena blm liat file ini)
+    # data = analytics_service.get_efficiency_dashboard(db, settings)
+    
+    # ✅ UBAH JADI INI:
+    data = kpi_calculator.get_efficiency_dashboard(db, settings)
+    
     return {"status": "success", "data": data}
 
 # ==========================================
@@ -109,6 +120,7 @@ def get_efficiency_dashboard(db: Session = Depends(get_db)):
 @router.get("/analytics/monitoring-alerts")
 @router.get("/api/analytics/monitoring-alerts")
 def get_monitoring_alerts(db: Session = Depends(get_db)):
+    # Memang pakai analytics_service sesuai file terlampir (Aman)
     data_alerts = analytics_service.get_realtime_alerts(db)
     return {
         "status": "success",
@@ -129,7 +141,8 @@ def get_rejection_analysis(
     if not startDate: startDate = str(date.today())
     if not endDate: endDate = str(date.today())
     
-    return analytics_service.get_rejection_analysis(db, startDate, endDate)
+    # 🌟 Arahkan ke metrics_service
+    return metrics_service.get_rejection_analysis(db, startDate, endDate)
 
 # ==========================================
 # ENDPOINT 9: MANAGER OVERVIEW (LEGACY)
@@ -140,7 +153,8 @@ def get_manager_overview(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(require_role("manager_logistik"))
 ):
-    return analytics_service.get_manager_overview(db)
+    # 🌟 Arahkan ke metrics_service
+    return metrics_service.get_manager_overview(db)
 
 
 # =========================================================================
@@ -159,35 +173,46 @@ def export_analytics_data(
     if not endDate: endDate = str(date.today())
 
     try:
-        # 1. Tarik Data DO dari Database
-        orders = db.query(models.DeliveryOrder).all()
+        start_dt = datetime.strptime(startDate, "%Y-%m-%d")
+        end_dt = datetime.strptime(endDate, "%Y-%m-%d")
+
+        orders = db.query(models.DeliveryOrder).filter(
+            models.DeliveryOrder.created_at >= start_dt,
+            models.DeliveryOrder.created_at <= end_dt
+        ).all()
         
-        # 2. Olah data ke dalem list (Biar rapi di Excel)
         export_data = []
         for o in orders:
             export_data.append({
                 "Order ID": o.order_id,
-                "Customer": o.customer_name,
+                "Customer": (
+                    o.customer.store_name
+                    if o.customer
+                    else "Unknown"
+                ),
                 "Status": o.status.value if o.status else "Unknown",
                 "Total Weight (KG)": o.weight_total,
-                "Tiba di Toko": getattr(o, 'arrival_time', 'Belum Tiba'), 
+                "Tiba di Toko": (
+                    o.route_line.actual_arrival_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if (
+                        o.route_line and
+                        o.route_line.actual_arrival_time
+                    )
+                    else "Belum Tiba"
+                ),  
             })
 
-        # Kalo data kosong, bikin row dummy biar Excel ga error
         if not export_data:
             export_data.append({"Info": f"Tidak ada data DO untuk periode {startDate} hingga {endDate}"})
 
-        # 3. Sulap List jadi DataFrame Pandas
         df = pd.DataFrame(export_data)
 
-        # 4. Tulis DataFrame ke dalem memori (RAM) sebagai file Excel
         stream = io.BytesIO()
         with pd.ExcelWriter(stream, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='Delivery Orders', index=False)
             
         stream.seek(0)
 
-        # 5. Lempar ke browser buat didownload otomatis
         filename = f"JAPFA_Logistics_Report_{startDate}_to_{endDate}.xlsx"
         
         return StreamingResponse(

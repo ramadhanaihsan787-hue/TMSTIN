@@ -5,15 +5,11 @@ import { api } from "../../../shared/services/apiClient";
 
 export const useRouteOptimization = () => {
     const [isOptimizing, setIsOptimizing] = useState(false);
-    
-    // 🌟 Ditambah fase 'preview_zone' biar UI tau kapan harus pause
     const [optimizationPhase, setOptimizationPhase] = useState<'idle' | 'zoning' | 'preview_zone' | 'balancing' | 'routing' | 'matching' | 'validating' | 'done'>('idle');
     const [zoningData, setZoningData] = useState<any>(null); 
-    
     const [previewData, setPreviewData] = useState<any>(null);
     const [loadingProgress, setLoadingProgress] = useState(0);
 
-    // 🌟 LANGKAH 1: CUMA BIKIN KOTAK ZONASI (PAUSE DI SINI)
     const generateSpatialZones = async (preview = false) => {
         setIsOptimizing(true);
         setLoadingProgress(5);
@@ -24,12 +20,10 @@ export const useRouteOptimization = () => {
             setZoningData(zoneRes.data.data);
             setLoadingProgress(100); 
             
-            // Berhenti bentar biar overlay loadingnya kerasa, lalu pindah ke mode preview!
             setTimeout(() => {
                 setOptimizationPhase('preview_zone');
                 setIsOptimizing(false); 
             }, 1500);
-
         } catch (error) {
             console.error("Gagal buat zona spasial:", error);
             toast.error("Gagal memetakan zona distribusi.");
@@ -38,7 +32,6 @@ export const useRouteOptimization = () => {
         }
     };
 
-    // 🌟 LANGKAH 2: TOMBOL "LANJUT AI" DIKLIK ADMIN
     const runAIOptimization = async (preview = false) => {
         setIsOptimizing(true);
         setOptimizationPhase('balancing');
@@ -59,6 +52,7 @@ export const useRouteOptimization = () => {
             const startRes = await api.post(`/api/routes/optimize/start?preview=${preview}`);
             const jobId = startRes.data.job_id;
 
+            // --- FASE 1: NUNGGU VRP SELESAI ---
             const checkVrpStatus = async () => {
                 try {
                     const statusRes = await api.get(`/api/routes/optimize/status/${jobId}`);
@@ -66,27 +60,37 @@ export const useRouteOptimization = () => {
 
                     if (jobInfo.status === 'completed') {
                         clearInterval(progressInterval);
-                        
                         setOptimizationPhase('validating');
                         setLoadingProgress(85); 
                         
+                        // --- FASE 2: TRAFFIC VALIDATION (LOGIC TEMEN LU) ---
+                        let retryCount = 0;
+                        const MAX_RETRY = 40;
                         const trafficInterval = setInterval(() => {
                             setLoadingProgress((old) => (old >= 95 ? 95 : old + 2));
                         }, 500);
-                        
-                        try {
-                            await api.post(`/api/routes/validate-traffic/${jobId}`);
-                            
-                            const checkTrafficStatus = async () => {
+
+                        const checkTrafficStatus = async () => {
+                            retryCount++;
+                            if (retryCount >= MAX_RETRY) {
+                                clearInterval(trafficInterval);
+                                toast.error("Traffic validation timeout. Menampilkan hasil tanpa validasi macet.");
+                                setPreviewData(jobInfo.data);
+                                setIsOptimizing(false);
+                                setOptimizationPhase('done');
+                                setLoadingProgress(0);
+                                return;
+                            }
+
+                            try {
                                 const tRes = await api.get(`/api/routes/validate-traffic/${jobId}/status`);
                                 const tInfo = tRes.data;
-                                
+
                                 if (tInfo.status === 'completed') {
                                     clearInterval(trafficInterval);
                                     setLoadingProgress(100);
-                                    
                                     const finalData = { ...jobInfo.data, traffic_warnings: tInfo.warnings };
-                                    
+
                                     if (tInfo.critical_count > 0) {
                                         toast.warning(`🚨 AI mendeteksi ${tInfo.critical_count} toko berpotensi terlambat akibat macet!`);
                                     }
@@ -96,25 +100,31 @@ export const useRouteOptimization = () => {
                                         setIsOptimizing(false);
                                         setOptimizationPhase('done');
                                         setLoadingProgress(0);
-                                        setZoningData(null); // Bersihin zonasi biar ga nyangkut
+                                        setZoningData(null);
                                     }, 800);
-                                    
-                                } else if (tInfo.status === 'failed') {
-                                    throw new Error("Gagal cek macet TomTom");
-                                } else {
-                                    setTimeout(checkTrafficStatus, 1500); 
-                                }
-                            };
-                            setTimeout(checkTrafficStatus, 1500);
 
-                        } catch (trafficErr) {
-                            clearInterval(trafficInterval);
-                            setPreviewData(jobInfo.data);
-                            setIsOptimizing(false);
-                            setOptimizationPhase('done');
-                            setZoningData(null);
-                            toast.warning("Gagal memvalidasi kemacetan jalan, menampilkan estimasi standar.");
-                        }
+                                } else if (tInfo.status === 'failed') {
+                                    clearInterval(trafficInterval);
+                                    toast.error(tInfo.message || "Traffic validation gagal.");
+                                    setPreviewData(jobInfo.data);
+                                    setIsOptimizing(false);
+                                    setOptimizationPhase('done');
+                                    setLoadingProgress(0);
+                                } else {
+                                    setTimeout(checkTrafficStatus, 1500);
+                                }
+                            } catch (err) {
+                                clearInterval(trafficInterval);
+                                toast.error("Gagal mengecek status traffic validation.");
+                                setPreviewData(jobInfo.data);
+                                setIsOptimizing(false);
+                                setOptimizationPhase('done');
+                                setLoadingProgress(0);
+                            }
+                        };
+
+                        await api.post(`/api/routes/validate-traffic/${jobId}`);
+                        setTimeout(checkTrafficStatus, 1500);
 
                     } else if (jobInfo.status === 'failed') {
                         clearInterval(progressInterval);
@@ -135,7 +145,6 @@ export const useRouteOptimization = () => {
                     toast.error("Terjadi kesalahan saat mengecek status AI.");
                 }
             };
-
             setTimeout(checkVrpStatus, 2000);
 
         } catch (err) {
@@ -182,14 +191,14 @@ export const useRouteOptimization = () => {
     return {
         isOptimizing,
         optimizationPhase, 
-        zoningData,        
+        zoningData,          
         previewData,
         setPreviewData,
         loadingProgress,
-        generateSpatialZones, // <-- DI EXPORT KE UI
-        runAIOptimization,    // <-- DI EXPORT KE UI
+        generateSpatialZones,
+        runAIOptimization,   
         resequenceRoute, 
         confirm,
-        setOptimizationPhase // <-- DI EXPORT BIAR BISA DI CANCEL
+        setOptimizationPhase 
     };
 };

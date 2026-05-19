@@ -7,12 +7,15 @@ import models
 import schemas # 🌟 SUNTIKAN PYDANTIC!
 from dependencies import get_db, get_settings, get_current_user
 
+# 🌟 PANGGIL SERVICE LANGSUNG
+from services import metrics_service
+
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 # ==========================================
 # ENDPOINT 1: LIVE TRACKING
 # ==========================================
-@router.get("/live-tracking", response_model=schemas.LiveTrackingResponse) # 🌟 SUNTIK SINI
+@router.get("/live-tracking", response_model=schemas.LiveTrackingResponse)
 def get_live_tracking(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -98,7 +101,7 @@ def get_live_tracking(
 # ==========================================
 # ENDPOINT 2: REAL-TIME ALERTS
 # ==========================================
-@router.get("/alerts", response_model=schemas.AlertResponse) # 🌟 SUNTIK SINI
+@router.get("/alerts", response_model=schemas.AlertResponse)
 def get_realtime_alerts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -164,7 +167,7 @@ def get_realtime_alerts(
     return {"status": "success", "data": alerts}
 
 # ==========================================
-# ENDPOINT 3 & 4: LEGACY SUPPORT WIDGETS
+# ENDPOINT 3, 4, & 5: LEGACY SUPPORT WIDGETS
 # ==========================================
 @router.get("/hourly-volume")
 def dashboard_hourly_volume(
@@ -172,8 +175,8 @@ def dashboard_hourly_volume(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    from routers.analytics import get_delivery_volume
-    return get_delivery_volume(period, period, db, current_user)
+    date_str = str(date.today()) if period == "today" else period
+    return metrics_service.get_delivery_volume(db, date_str, date_str)
 
 @router.get("/fleet-utilization")
 def dashboard_fleet_utilization(
@@ -181,8 +184,8 @@ def dashboard_fleet_utilization(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    from routers.analytics import get_fleet_utilization
-    return get_fleet_utilization(period, period, db, current_user)
+    date_str = str(date.today()) if period == "today" else period
+    return metrics_service.get_fleet_utilization(db, date_str, date_str)
 
 @router.get("/rejections")
 def dashboard_rejections(
@@ -191,10 +194,7 @@ def dashboard_rejections(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
-    from routers.analytics import get_rejection_analysis 
-    return get_rejection_analysis(
-        startDate=start_date, 
-        endDate=end_date, 
-        db=db, 
-        current_user=current_user
-    )
+    # Fallback to today if dates are missing
+    start = start_date if start_date else str(date.today())
+    end = end_date if end_date else str(date.today())
+    return metrics_service.get_rejection_analysis(db, start, end)

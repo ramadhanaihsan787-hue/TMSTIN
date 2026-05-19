@@ -1,9 +1,9 @@
 # Backend/routers/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional
-from pydantic import BaseModel # 🌟 Jangan lupa import ini
+from pydantic import BaseModel
 
 # Kita butuh jwt buat bongkar token refresh-nya
 from jose import jwt, JWTError
@@ -12,6 +12,7 @@ import models
 import schemas 
 from dependencies import get_db, get_current_user, require_role
 from services.auth_service import AuthService
+from main import limiter  # 🌟 Aman, karena di main.py bendanya dibuat duluan sekarang
 
 # 🌟 Coba tarik SECRET_KEY dari modul security lu
 try:
@@ -23,8 +24,13 @@ except ImportError:
 
 router = APIRouter(tags=["Authentication"])
 
+# ==========================================================
+# 🌟 ENDPOINT LOGIN DENGAN RATE LIMITER (Anti Brute-Force & Bot)
+# ==========================================================
 @router.post("/login")
+@limiter.limit("10/minute")
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -51,7 +57,7 @@ def login(
     }
 
 # ==========================================================
-# 🌟 ENDPOINT BARU CTO: REFRESH TOKEN (BIAR SUPIR GA MATI LOGINNYA)
+# 🌟 ENDPOINT BARU REFRESH TOKEN (BIAR SUPIR GA MATI LOGINNYA)
 # ==========================================================
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
@@ -90,13 +96,15 @@ def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db
     }
 
 # ==========================================================
-# GEMBOK ENDPOINT REGISTER (SAMA KAYA KEMAREN)
+# GEMBOK ENDPOINT REGISTER
 # ==========================================================
 @router.post("/auth/register", status_code=201, response_model=schemas.RegisterResponse)
 def register_user(
     data: schemas.RegisterRequest,
     db: Session = Depends(get_db),
-    #current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+    current_user: models.User = Depends(
+        require_role("admin_distribusi", "manager_logistik")
+    )
 ):
     VALID_ROLES = ["manager_logistik", "admin_distribusi", "admin_pod", "driver", "kasir"]
     

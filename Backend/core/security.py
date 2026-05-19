@@ -19,13 +19,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify if plain password matches hashed password
-    
-    Args:
-        plain_password: Password entered by user
-        hashed_password: Hashed password from database
-        
-    Returns:
-        bool: True if password matches, False otherwise
     """
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -33,12 +26,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """
     Hash a plain password
-    
-    Args:
-        password: Plain password to hash
-        
-    Returns:
-        str: Hashed password
     """
     return pwd_context.hash(password)
 
@@ -49,13 +36,6 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """
     Create JWT access token
-    
-    Args:
-        data: Data to encode in token (e.g., {"sub": "username", "role": "admin"})
-        expires_delta: Custom expiration time. If None, uses ACCESS_TOKEN_EXPIRE_MINUTES
-        
-    Returns:
-        str: Encoded JWT token
     """
     to_encode = data.copy()
     
@@ -75,17 +55,28 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 def decode_token(token: str) -> dict:
     """
-    Decode JWT token
-    
-    Args:
-        token: JWT token to decode
-        
-    Returns:
-        dict: Decoded token payload
-        
-    Raises:
-        jwt.JWTError: If token is invalid or expired
+    Decode JWT token with strict expiry enforcement
     """
-    # 🌟 UBAH 4: Ambil SECRET_KEY dan ALGORITHM dari settings
-    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    return payload
+    try:
+        # 🌟 UBAH 4: Ambil SECRET_KEY dan ALGORITHM dari settings
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        
+        # 🌟 FIX ISSUE #10: DOUBLE-CHECK PROTECTION (Validasi Manual Epoch Timestamp)
+        exp_time = payload.get("exp")
+        if exp_time:
+
+            if isinstance(exp_time, datetime):
+                exp_timestamp = exp_time.timestamp()
+            else:
+                exp_timestamp = float(exp_time)
+
+            if datetime.utcnow().timestamp() > exp_timestamp:
+                raise jwt.ExpiredSignatureError("Token expired")
+            
+        return payload
+        
+    except jwt.ExpiredSignatureError as e:
+        # Lempar error spesifik agar dicatch dependencies.py menjadi HTTPException(401)
+        raise jwt.ExpiredSignatureError("Token expired") from e
+    except jwt.JWTError as e:
+        raise e

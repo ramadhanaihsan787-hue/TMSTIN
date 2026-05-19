@@ -1,5 +1,5 @@
 # Backend/routers/orders.py
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -10,6 +10,64 @@ import schemas
 from dependencies import get_db, get_settings, get_current_user, require_role
 from services import order_import_service
 from services.order_service import OrderService, OrderServiceError, OrderNotFoundError, OrderValidationError
+from main import limiter  # 🌟 Import limiter untuk pembatasan traffic CPU/Spam
+
+# =======================================================
+# 🌟 ORDER STATUS STATE MACHINE
+# =======================================================
+
+VALID_TRANSITIONS = {
+    models.DOStatus.so_waiting_verification: [
+        models.DOStatus.do_verified
+    ],
+
+    models.DOStatus.do_verified: [
+        models.DOStatus.do_assigned_to_route
+    ],
+
+    models.DOStatus.do_assigned_to_route: [
+        models.DOStatus.delivered_pod_uploaded,
+        models.DOStatus.cancelled
+    ],
+
+    models.DOStatus.delivered_pod_uploaded: [
+        models.DOStatus.delivered_success,
+        models.DOStatus.delivered_partial,
+        models.DOStatus.do_assigned_to_route
+    ],
+
+    models.DOStatus.delivered_success: [
+        models.DOStatus.billed
+    ],
+
+    models.DOStatus.delivered_partial: [
+        models.DOStatus.billed
+    ],
+
+    models.DOStatus.cancelled: [],
+
+    models.DOStatus.billed: []
+}
+
+# =======================================================
+# 🌟 FSM VALIDATOR
+# =======================================================
+
+def validate_status_transition(current_status, new_status):
+    allowed = VALID_TRANSITIONS.get(current_status, [])
+    
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid status transition: "
+                f"{current_status.value} → {new_status.value}"
+            )
+        )
+
+# =======================================================
+# ROUTER CONFIG
+# =======================================================
 
 router = APIRouter(prefix="/api", tags=["Orders & Delivery"])
 
@@ -26,10 +84,12 @@ class WeightUpdateRequest(BaseModel):
     weight: float
 
 # =======================================================
-# UPLOAD SAP FILE (Udah Pake Import Service Kemaren)
+# 🌟 UPLOAD SAP FILE DENGAN RATE LIMITER (Anti Spam & Duplikat)
 # =======================================================
 @router.post("/orders/upload", response_model=schemas.UploadResponse)
+@limiter.limit("5/hour")
 async def upload_sap_file(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
@@ -50,7 +110,7 @@ async def upload_sap_file(
         raise HTTPException(status_code=500, detail=f"Gagal proses file: {str(e)}")
 
 # =======================================================
-# UPDATE OPERATIONS DENGAN TRANSACTION MANAGER ELEGANT
+# UPDATE OPERATIONS
 # =======================================================
 @router.put("/orders/{order_id}/time", response_model=schemas.OrderActionResponse)
 def update_time_window(
@@ -95,13 +155,26 @@ def update_weight(order_id: str, data: WeightUpdateRequest, db: Session = Depend
         raise HTTPException(status_code=404, detail=str(e))
 
 # =======================================================
-# APPROVE / REJECT POD DENGAN TRANSACTION MANAGER ELEGANT
+# APPROVE / REJECT POD DENGAN FSM VALIDATOR
 # =======================================================
 @router.put("/orders/{order_id}/pod/approve", response_model=schemas.PodVerificationResponse)
 def approve_pod(
     order_id: str, data: schemas.PodApproveRequest, db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))
 ):
     try:
+        # FSM Validator Check
+        existing_order = db.query(models.DeliveryOrder).filter(
+            models.DeliveryOrder.order_id == order_id
+        ).first()
+
+        if not existing_order:
+            raise HTTPException(status_code=404, detail="DO tidak ditemukan.")
+
+        validate_status_transition(
+            existing_order.status,
+            models.DOStatus.delivered_success
+        )
+
         order = OrderService.approve_pod(db, order_id)
         db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
         return {"status": "success", "message": f"POD untuk DO {order_id} BERHASIL DISETUJUI!", "order_id": order_id, "new_status": order.status.value}
@@ -117,6 +190,19 @@ def reject_pod(
     order_id: str, data: schemas.PodRejectRequest, db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))
 ):
     try:
+        # FSM Validator Check
+        existing_order = db.query(models.DeliveryOrder).filter(
+            models.DeliveryOrder.order_id == order_id
+        ).first()
+
+        if not existing_order:
+            raise HTTPException(status_code=404, detail="DO tidak ditemukan.")
+
+        validate_status_transition(
+            existing_order.status,
+            models.DOStatus.do_assigned_to_route
+        )
+
         order = OrderService.reject_pod(db, order_id, data.reason, data.notes)
         db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
         return {"status": "success", "message": f"POD untuk DO {order_id} DITOLAK! Alasan: {data.reason}", "order_id": order_id, "new_status": order.status.value}
@@ -128,7 +214,7 @@ def reject_pod(
         raise HTTPException(status_code=400, detail=str(e))
 
 # =======================================================
-# READ-ONLY ENDPOINTS (Aman di Router)
+# READ-ONLY ENDPOINTS
 # =======================================================
 @router.get("/orders", response_model=schemas.PendingOrderResponse)
 def get_pending_orders(status: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

@@ -26,42 +26,107 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # 🌟 HELPER FUNCTION: WATERMARK GENERATOR
 # ==========================================
 def add_watermark(image_bytes: bytes, text_lines: list) -> bytes:
-    """Nambahin teks koordinat & jam transparan ke atas foto"""
+    """
+    Tambahkan watermark GPS + waktu ke foto POD
+    Cross-platform font fallback
+    """
+
     try:
+
         img = Image.open(io.BytesIO(image_bytes))
-        
+
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        txt_layer = Image.new('RGBA', img.size, (255, 255, 255, 0))
-        d = ImageDraw.Draw(txt_layer)
+        txt_layer = Image.new(
+            'RGBA',
+            img.size,
+            (255, 255, 255, 0)
+        )
 
-        try:
-            font_size = max(16, int(img.size[0] * 0.03))
-            fnt = ImageFont.load_default()
-        except:
-            fnt = None
+        draw = ImageDraw.Draw(txt_layer)
 
-        margin = 15
-        y_text = img.size[1] - margin - (len(text_lines) * 20) 
+        # ==========================================
+        # 🌟 CROSS PLATFORM FONT FALLBACK
+        # ==========================================
+        font_size = max(18, int(img.size[0] * 0.025))
 
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+            "/System/Library/Fonts/Arial.ttf",                  # macOS
+            "C:\\Windows\\Fonts\\arial.ttf",                    # Windows
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]
+
+        font = None
+
+        for path in font_paths:
+
+            try:
+                font = ImageFont.truetype(path, font_size)
+                break
+
+            except OSError:
+                continue
+
+        if font is None:
+            font = ImageFont.load_default()
+
+        # ==========================================
+        # 🌟 WATERMARK POSITION
+        # ==========================================
+        margin = 20
+        line_height = font_size + 6
+
+        total_height = len(text_lines) * line_height
+
+        y_text = img.size[1] - total_height - margin
+
+        # ==========================================
+        # 🌟 DRAW WATERMARK
+        # ==========================================
         for line in text_lines:
-            d.text((margin+1, y_text+1), line, font=fnt, fill=(0, 0, 0, 200))
-            d.text((margin, y_text), line, font=fnt, fill=(255, 255, 255, 180))
-            y_text += 20 
+
+            # Shadow
+            draw.text(
+                (margin + 2, y_text + 2),
+                line,
+                font=font,
+                fill=(0, 0, 0, 180)
+            )
+
+            # Main Text
+            draw.text(
+                (margin, y_text),
+                line,
+                font=font,
+                fill=(255, 255, 255, 210)
+            )
+
+            y_text += line_height
 
         watermarked = Image.alpha_composite(img, txt_layer)
 
         if watermarked.mode == 'RGBA':
             watermarked = watermarked.convert('RGB')
 
-        img_byte_arr = io.BytesIO()
-        watermarked.save(img_byte_arr, format='JPEG', quality=85) 
-        return img_byte_arr.getvalue()
-        
+        output = io.BytesIO()
+
+        watermarked.save(
+            output,
+            format='JPEG',
+            quality=88
+        )
+
+        return output.getvalue()
+
     except Exception as e:
-        logger.warning(f"⚠️ Gagal menempelkan watermark! Menyimpan foto original. Error: {e}")
-        return image_bytes 
+
+        logger.warning(
+            f"⚠️ Gagal watermark image: {e}"
+        )
+
+        return image_bytes
 
 
 # ==========================================
