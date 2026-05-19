@@ -51,10 +51,10 @@ interface RouteMapProps {
     routesData: any[]; 
     selectedRouteId: string | null;
     truckColors: string[];
-    // 🌟 FIX TS: Hapus variabel droppedNodesData yang ngga kepake atau dibiarin tapi ga usah dipanggil
     droppedNodesData?: any[]; 
     trafficWarnings?: TrafficWarning[]; 
     onSelectRoute?: (routeId: string | null) => void;
+    zonesData?: any[]; // 🌟 FIX TS: Tambahin baris ini supaya error zonesData hilang!
 }
 
 // ... (Isi ke bawahnya sama persis kayak yang lu kirim tadi, ngga ada yang diubah) ...

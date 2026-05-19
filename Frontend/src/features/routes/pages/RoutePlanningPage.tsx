@@ -1,5 +1,5 @@
 // src/features/routes/pages/RoutePlanningPage.tsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from 'sonner'; 
 import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'; 
 
@@ -40,16 +40,11 @@ export default function RoutePlanningPage() {
     const [isGeneratingOnCall, setIsGeneratingOnCall] = useState(false); 
 
     const truckColors = [
-        '#7f1d1d', // muted red
-        '#1e3a5f', // muted blue
-        '#14532d', // muted green
-        '#78350f', // muted amber
-        '#4c1d95', // muted purple
-        '#134e4a', // muted teal
-        '#7c2d12'  // muted orange
+        '#7f1d1d', '#1e3a5f', '#14532d', '#78350f', '#4c1d95', '#134e4a', '#7c2d12'
     ];
 
-    const { routesData, droppedNodes, selectedRouteId, setSelectedRouteId, fetchRoutes } = useRoutes();
+    // 🌟 SINKRONISASI: Ambil zonesData dari useRoutes
+    const { routesData, droppedNodes, zonesData, selectedRouteId, setSelectedRouteId, fetchRoutes } = useRoutes();
     
     const { 
         isUploading, uploadReport, setUploadReport, uploadFile, 
@@ -90,6 +85,21 @@ export default function RoutePlanningPage() {
         }, 2000);
     };
 
+    // Helper untuk auto-fix koordinat polygon mapbox (mencegah crash GeoJSON akibat salah dimensi array)
+    const ensureValidPolygonCoords = (coords: any) => {
+        if (!Array.isArray(coords)) return [];
+        if (Array.isArray(coords[0]) && Array.isArray(coords[0][0]) && !Array.isArray(coords[0][0][0])) {
+            return coords; // Valid 3D Array [[[lon, lat], ...]]
+        }
+        if (Array.isArray(coords[0]) && !Array.isArray(coords[0][0])) {
+            return [coords]; // Bungkus 2D Array jadi 3D Array
+        }
+        if (Array.isArray(coords[0]) && Array.isArray(coords[0][0]) && Array.isArray(coords[0][0][0])) {
+            return coords[0]; // Lepas bungkus 4D Array jadi 3D Array
+        }
+        return coords;
+    };
+
     const safeRoutesData = Array.isArray(routesData) ? routesData : [];
     const totalFleet = safeRoutesData.length;
     const totalOrders = safeRoutesData.reduce((sum, route: any) => sum + (route.destinationCount || route.destinasi_jumlah || 0), 0);
@@ -128,7 +138,7 @@ export default function RoutePlanningPage() {
                 />
             )}
 
-            {/* 🌟 PREVIEW ZONA MODAL: Menampilkan Polygon Permanen */}
+            {/* PREVIEW ZONA MODAL */}
             {optimizationPhase === 'preview_zone' && (
                 <div className="fixed inset-0 z-[999999] bg-slate-900/90 backdrop-blur-sm flex flex-col p-4 md:p-8">
                     <div className="bg-white dark:bg-[#111] flex-1 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
@@ -160,13 +170,15 @@ export default function RoutePlanningPage() {
                                 mapStyle="mapbox://styles/mapbox/dark-v11"
                                 mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                             >
-                                {/* 🌟 INI DIA POLYGON NYAMBUNGNYA! */}
                                 <Source id="static-zones" type="geojson" data={{
                                     type: 'FeatureCollection',
                                     features: zoningData?.map((zone: any, i: number) => ({
                                         type: 'Feature',
                                         properties: { zone_id: zone.zone_id, color: truckColors[i % truckColors.length] },
-                                        geometry: { type: 'Polygon', coordinates: zone.bounding_polygon } // FIX ARRAY 4D
+                                        geometry: { 
+                                            type: 'Polygon', 
+                                            coordinates: ensureValidPolygonCoords(zone.bounding_polygon || zone.coordinates) 
+                                        } 
                                     }))
                                 } as any}>
                                     <Layer
@@ -177,7 +189,6 @@ export default function RoutePlanningPage() {
                                             'fill-opacity': 0.13
                                         }}
                                     />
-
                                     <Layer
                                         id="static-zones-line"
                                         type="line"
@@ -190,11 +201,10 @@ export default function RoutePlanningPage() {
                                     />
                                 </Source>
 
-                                {/* Looping pin toko dari AI */}
                                 {zoningData?.map((zone: any, i: number) => {
                                     const color = truckColors[i % truckColors.length];
-                                    return zone.stores.map((store: any, j: number) => (
-                                        <Marker key={`z${i}-s${j}`} longitude={store.lon} latitude={store.lat} anchor="center">
+                                    return zone.stores?.map((store: any, j: number) => (
+                                        <Marker key={`z${i}-s${j}`} longitude={store.lon || store.lng} latitude={store.lat} anchor="center">
                                             <div className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" style={{ backgroundColor: color }}></div>
                                         </Marker>
                                     ));
@@ -214,12 +224,8 @@ export default function RoutePlanningPage() {
                         setPreviewData(null);
                         setShowVerificationModal(true); 
                     }}
-                    onProceedDispatch={(draft) => {
-                        setDispatchData(draft);
-                    }}
-                    onResequence={async (draft) => {
-                        return await resequenceRoute(draft);
-                    }}
+                    onProceedDispatch={(draft) => setDispatchData(draft)}
+                    onResequence={async (draft) => await resequenceRoute(draft)}
                 />
             )}
 
@@ -297,12 +303,14 @@ export default function RoutePlanningPage() {
                                     selectedRouteId={selectedRouteId}
                                     truckColors={truckColors}
                                     onSelectRoute={setSelectedRouteId}
+                                    zonesData={zonesData}
                                 />
                             }
                         />
                     </div>
                 </div>
 
+                {/* Live Route Map Section */}
                 <div className="w-full mt-8 bg-white dark:bg-[#1F1F1F] border border-slate-200 dark:border-[#333] rounded-2xl shadow-sm overflow-hidden flex flex-col h-[70vh] min-h-[600px]">
                     <div className="p-5 border-b border-slate-200 dark:border-[#333] shrink-0 flex justify-between items-center bg-slate-50 dark:bg-[#1A1A1A]">
                         <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
@@ -318,6 +326,7 @@ export default function RoutePlanningPage() {
                             truckColors={truckColors}
                             droppedNodesData={droppedNodes}
                             onSelectRoute={setSelectedRouteId}
+                            zonesData={zonesData} 
                         />
                     </div>
                 </div>

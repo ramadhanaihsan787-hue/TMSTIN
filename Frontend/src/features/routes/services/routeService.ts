@@ -84,7 +84,7 @@ export const routeService = {
 
   // 9. RESEQUENCE (TSP MANUAL OVERRIDE)
   resequenceRoute: async (draftData: any) => {
-      const res = await api.post(`/api/routes/resequence`, draftData, { timeout: 120000 });
+      const res = await api.post('/api/routes/resequence', draftData, { timeout: 120000 });
       return res.data;
   },
 

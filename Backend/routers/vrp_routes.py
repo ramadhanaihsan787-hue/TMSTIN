@@ -456,65 +456,66 @@ def confirm_routes(
                     raise HTTPException(status_code=400, detail=f"DO '{nomor_do}' tidak ditemukan.")
 
         # =====================================================
-        # 🌟 PHASE 2 - TRANSACTION BEGIN
+        # 🌟 PHASE 2 - EKSEKUSI DATABASE
         # =====================================================
-        with db.begin():
-            # HAPUS ROUTE HARI INI
-            existing_routes = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).all()
+        # HAPUS ROUTE HARI INI
+        existing_routes = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).all()
 
-            for rute in existing_routes:
-                db.query(models.TMSRouteLine).filter(models.TMSRouteLine.route_id == rute.route_id).delete()
+        for rute in existing_routes:
+            db.query(models.TMSRouteLine).filter(models.TMSRouteLine.route_id == rute.route_id).delete()
 
-            db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).delete()
+        db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == today).delete()
 
-            # INSERT ROUTE BARU
-            for truk in jadwal:
-                nopol = truk.get("armada")
-                vehicle = db.query(models.FleetVehicle).filter(models.FleetVehicle.license_plate == nopol).first()
+        # INSERT ROUTE BARU
+        for truk in jadwal:
+            nopol = truk.get("armada")
+            vehicle = db.query(models.FleetVehicle).filter(models.FleetVehicle.license_plate == nopol).first()
 
-                new_plan = models.TMSRoutePlan(
+            new_plan = models.TMSRoutePlan(
+                route_id=truk["route_id"],
+                planning_date=today,
+                vehicle_id=vehicle.vehicle_id,
+                driver_id=truk.get("driver_id"),
+                helper_id=truk.get("helper_id"),
+                total_weight=truk.get("total_muatan_kg", 0),
+                total_distance_km=truk.get("total_jarak_km", 0)
+            )
+
+            db.add(new_plan)
+
+            # INSERT ROUTE LINES
+            for stop in truk.get("detail_perjalanan", []):
+                nomor_do = stop.get("nomor_do") or stop.get("order_id") or stop.get("id")
+                if not nomor_do:
+                    continue
+
+                # SAFE TIME PARSER
+                try:
+                    jam_parts = str(stop["jam_tiba"]).split(":")
+                    jam_est = datetime.time(hour=int(jam_parts[0]), minute=int(jam_parts[1]))
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Invalid jam_tiba pada route {truk['route_id']}: {stop.get('jam_tiba')} | {str(e)}"
+                    )
+                    jam_est = datetime.time(hour=12, minute=0)
+
+                route_line = models.TMSRouteLine(
                     route_id=truk["route_id"],
-                    planning_date=today,
-                    vehicle_id=vehicle.vehicle_id,
-                    driver_id=truk.get("driver_id"),
-                    helper_id=truk.get("helper_id"),
-                    total_weight=truk.get("total_muatan_kg", 0),
-                    total_distance_km=truk.get("total_jarak_km", 0)
+                    order_id=nomor_do,
+                    sequence=stop.get("urutan", 0),
+                    est_arrival=jam_est,
+                    distance_from_prev_km=stop.get("distance_from_prev_km", 0)
                 )
 
-                db.add(new_plan)
+                db.add(route_line)
 
-                # INSERT ROUTE LINES
-                for stop in truk.get("detail_perjalanan", []):
-                    nomor_do = stop.get("nomor_do") or stop.get("order_id") or stop.get("id")
-                    if not nomor_do:
-                        continue
+                # UPDATE ORDER STATUS
+                order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == nomor_do).first()
+                if order:
+                    order.status = models.DOStatus.do_assigned_to_route
 
-                    # SAFE TIME PARSER
-                    try:
-                        jam_parts = str(stop["jam_tiba"]).split(":")
-                        jam_est = datetime.time(hour=int(jam_parts[0]), minute=int(jam_parts[1]))
-                    except Exception as e:
-                        logger.warning(
-                            f"⚠️ Invalid jam_tiba pada route {truk['route_id']}: {stop.get('jam_tiba')} | {str(e)}"
-                        )
-
-                        jam_est = datetime.time(hour=12, minute=0)
-
-                    route_line = models.TMSRouteLine(
-                        route_id=truk["route_id"],
-                        order_id=nomor_do,
-                        sequence=stop.get("urutan", 0),
-                        est_arrival=jam_est,
-                        distance_from_prev_km=stop.get("distance_from_prev_km", 0)
-                    )
-
-                    db.add(route_line)
-
-                    # UPDATE ORDER STATUS
-                    order = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.order_id == nomor_do).first()
-                    if order:
-                        order.status = models.DOStatus.do_assigned_to_route
+        # 🌟 JANGAN LUPA COMMIT DI SINI 🌟
+        db.commit()
 
         # =====================================================
         # 🌟 SUCCESS
@@ -532,18 +533,6 @@ def confirm_routes(
         db.rollback()
         logger.error(f"🚨 [CONFIRM ROUTES ERROR]: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gagal mengonfirmasi rute: {str(e)}")
-
-# Peringatan: Kode di bawah ini saya komentari karena memanggil 'job_id' yang tidak terdefinisi secara global. 
-# Jika dieksekusi apa adanya, akan memicu NameError saat server FastAPI dijalankan. 
-# Kemungkinan ini dimaksudkan untuk berada di dalam sebuah endpoint.
-'''
-TRAFFIC_JOBS[job_id] = {
-    "status": "queued",
-    "progress": 0,
-    "message": "Menunggu traffic validation...",
-    "updated_at": str(datetime.datetime.now())
-}
-'''
 
 # ------------------------------------------
 # 4. GET TRAFFIC VALIDATION STATUS

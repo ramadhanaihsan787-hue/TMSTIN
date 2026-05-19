@@ -10,14 +10,14 @@ export const useRouteOptimization = () => {
     const [previewData, setPreviewData] = useState<any>(null);
     const [loadingProgress, setLoadingProgress] = useState(0);
 
-    const generateSpatialZones = async (preview = false) => {
+    const generateSpatialZones = async (preview = true) => {
         setIsOptimizing(true);
         setLoadingProgress(5);
         setOptimizationPhase('zoning'); 
 
         try {
             const zoneRes = await api.post(`/api/routes/spatial-preview?preview=${preview}`);
-            setZoningData(zoneRes.data.data);
+            setZoningData(zoneRes.data?.data || zoneRes.data);
             setLoadingProgress(100); 
             
             setTimeout(() => {
@@ -37,9 +37,7 @@ export const useRouteOptimization = () => {
         setOptimizationPhase('balancing');
         setLoadingProgress(25);
         
-        let simTick = 0;
         const progressInterval = setInterval(() => {
-            simTick++;
             setLoadingProgress((old) => {
                 const next = old + 2;
                 if (next >= 40 && next < 60) setOptimizationPhase('routing');
@@ -52,7 +50,6 @@ export const useRouteOptimization = () => {
             const startRes = await api.post(`/api/routes/optimize/start?preview=${preview}`);
             const jobId = startRes.data.job_id;
 
-            // --- FASE 1: NUNGGU VRP SELESAI ---
             const checkVrpStatus = async () => {
                 try {
                     const statusRes = await api.get(`/api/routes/optimize/status/${jobId}`);
@@ -63,7 +60,6 @@ export const useRouteOptimization = () => {
                         setOptimizationPhase('validating');
                         setLoadingProgress(85); 
                         
-                        // --- FASE 2: TRAFFIC VALIDATION (LOGIC TEMEN LU) ---
                         let retryCount = 0;
                         const MAX_RETRY = 40;
                         const trafficInterval = setInterval(() => {
@@ -74,7 +70,7 @@ export const useRouteOptimization = () => {
                             retryCount++;
                             if (retryCount >= MAX_RETRY) {
                                 clearInterval(trafficInterval);
-                                toast.error("Traffic validation timeout. Menampilkan hasil tanpa validasi macet.");
+                                toast.error("Traffic validation timeout. Menampilkan hasil rute standar.");
                                 setPreviewData(jobInfo.data);
                                 setIsOptimizing(false);
                                 setOptimizationPhase('done');
@@ -110,12 +106,12 @@ export const useRouteOptimization = () => {
                                     setIsOptimizing(false);
                                     setOptimizationPhase('done');
                                     setLoadingProgress(0);
+                                    setZoningData(null);
                                 } else {
                                     setTimeout(checkTrafficStatus, 1500);
                                 }
                             } catch (err) {
                                 clearInterval(trafficInterval);
-                                toast.error("Gagal mengecek status traffic validation.");
                                 setPreviewData(jobInfo.data);
                                 setIsOptimizing(false);
                                 setOptimizationPhase('done');
@@ -123,8 +119,19 @@ export const useRouteOptimization = () => {
                             }
                         };
 
-                        await api.post(`/api/routes/validate-traffic/${jobId}`);
-                        setTimeout(checkTrafficStatus, 1500);
+                        try {
+                            await api.post(`/api/routes/validate-traffic/${jobId}`);
+                            setTimeout(checkTrafficStatus, 1500);
+                        } catch (trafficError) {
+                            clearInterval(trafficInterval);
+                            console.error("Traffic API Error, bypassing...", trafficError);
+                            toast.error("Gagal terhubung ke API Lalulintas. Menampilkan rute standar AI.");
+                            setPreviewData(jobInfo.data);
+                            setIsOptimizing(false);
+                            setOptimizationPhase('done');
+                            setLoadingProgress(0);
+                            setZoningData(null);
+                        }
 
                     } else if (jobInfo.status === 'failed') {
                         clearInterval(progressInterval);
@@ -140,7 +147,6 @@ export const useRouteOptimization = () => {
                     clearInterval(progressInterval);
                     setIsOptimizing(false);
                     setOptimizationPhase('idle');
-                    setZoningData(null);
                     setLoadingProgress(0);
                     toast.error("Terjadi kesalahan saat mengecek status AI.");
                 }
@@ -151,7 +157,6 @@ export const useRouteOptimization = () => {
             clearInterval(progressInterval);
             setIsOptimizing(false);
             setOptimizationPhase('idle');
-            setZoningData(null);
             setLoadingProgress(0);
             toast.error("Gagal memulai AI.");
         }

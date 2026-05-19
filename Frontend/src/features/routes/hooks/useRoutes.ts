@@ -1,3 +1,4 @@
+// src/features/routes/hooks/useRoutes.ts
 import { useState, useCallback } from "react";
 import { routeService } from "../services/routeService";
 import type { RouteItem, DroppedNode } from "../types";
@@ -5,7 +6,6 @@ import type { RouteItem, DroppedNode } from "../types";
 export const useRoutes = () => {
     const [routesData, setRoutesData] = useState<RouteItem[]>([]);
     const [droppedNodes, setDroppedNodes] = useState<DroppedNode[]>([]);
-    // 🌟 FIX: Tambahin state khusus zoning
     const [zonesData, setZonesData] = useState<any[]>([]); 
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -28,28 +28,28 @@ export const useRoutes = () => {
                     }));
 
                     return {
-                        routeId: r.route_id,
-                        // ... sisa mapping route lu ...
+                        routeId: r.route_id || r.routeId,
+                        destinationCount: r.destinasi_jumlah || r.destinationCount || mappedStops.length,
+                        transportCost: r.transport_cost || r.transportCost || 0,
+                        totalDistanceKm: r.total_distance_km || r.totalDistanceKm || 0,
+                        driverName: r.nama_driver || r.driver_name || "",
+                        plateNumber: r.plat_nomor || r.plate_number || "",
                         stops: mappedStops,
                         details: mappedStops, 
-                        geometry: r.garis_aspal || []
+                        geometry: r.garis_aspal || r.geometry || []
                     } as unknown as RouteItem; 
                 });
                 
                 setRoutesData(mapped);
                 setDroppedNodes(data.dropped_nodes || []);
-                
-                // 🌟 FIX: Jangan lupa set datanya bro!
-                // Pastikan backend beneran nge-return key "zones"
                 setZonesData(data.zones || []); 
-                
                 setSelectedRouteId(mapped[0]?.routeId || null);
             }
         } catch (err) {
             console.error("Gagal mengambil data rute:", err);
             setRoutesData([]);
             setDroppedNodes([]);
-            setZonesData([]); // Clear juga kalau error
+            setZonesData([]); 
             setSelectedRouteId(null);
         } finally {
             setIsLoading(false);
@@ -59,7 +59,7 @@ export const useRoutes = () => {
     return {
         routesData,
         droppedNodes,
-        zonesData, // 🌟 FIX: Lempar ini ke komponen Map lu
+        zonesData, 
         selectedRouteId,
         setSelectedRouteId, 
         isLoading,

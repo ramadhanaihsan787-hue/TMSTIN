@@ -171,38 +171,52 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         db.close() 
 
 # ==========================================
-# 2. ENDPOINT: TRIGGER VRP / SPATIAL PREVIEW
+# 2. ENDPOINT: TRIGGER SPATIAL PREVIEW (FIXED TO SYNCHRONOUS)
 # ==========================================
 @router.post("/routes/spatial-preview")
-def trigger_spatial_preview(
-    preview: bool = False,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: SessionLocal = Depends(get_settings) # Sesuaikan dependency jika perlu
-):
-    # 1. Bikin ID unik untuk tracking job-nya
-    job_id = str(uuid.uuid4())
-    
-    # 2. Daftarkan job ke dictionary global
-    VRP_JOBS[job_id] = {
-        "status": "processing",
-        "progress": 0,
-        "phase": "init",
-        "message": "Menyiapkan antrean optimasi rute...",
-        "updated_at": str(datetime.datetime.now())
-    }
-    
-    # 3. Lempar proses beratnya ke background
-    background_tasks.add_task(run_vrp_optimization_task, job_id, preview)
-    
-    # 4. Langsung kasih respon ke frontend (nggak perlu nunggu AI selesai)
-    return {
-        "message": "Proses VRP AI dimulai...",
-        "job_id": job_id,
-        "status": "processing"
-    }
+def trigger_spatial_preview(preview: bool = True):
+    """
+    🌟 FIX: Memanggil fungsi zoning Japfa dengan parameter utuh.
+    Mengambil data DO terverifikasi, diubah jadi list dict, lalu dikunci ke 7 zona.
+    """
+    db = SessionLocal()
+    try:
+        # 1. Ambil seluruh Delivery Order terverifikasi dari database
+        pending_orders = db.query(models.DeliveryOrder).filter(
+            models.DeliveryOrder.status == models.DOStatus.do_verified
+        ).all()
+        
+        if not pending_orders:
+            raise Exception("Tidak ada Delivery Order terverifikasi untuk dipetakan!")
+
+        # 2. Re-format data DB jadi format List of Dict sesuai ekspektasi zoning_service
+        locations_input = []
+        for order in pending_orders:
+            store_name = order.customer.store_name if hasattr(order, 'customer') and order.customer else (order.customer_name if hasattr(order, 'customer_name') else "Toko")
+            locations_input.append({
+                "lat": float(order.latitude),
+                "lon": float(order.longitude),
+                "nama_toko": store_name,
+                "order_id": order.order_id,
+                "weight": float(order.weight_total)
+            })
+
+        # 3. Panggil fungsi zoning_service dengan melampirkan 2 argumen wajibnya
+        # num_zones dikunci ke angka 7 sesuai racikan kustom JAPFA
+        zones_data = zoning_service.generate_spatial_zones(locations_input, num_zones=7)
+        
+        return {
+            "status": "success",
+            "data": zones_data
+        }
+    except Exception as e:
+        logger.error(f"🚨 [SPATIAL PREVIEW ENDPOINT ERROR]: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Gagal memuat spatial preview: {str(e)}")
+    finally:
+        db.close()
 
 # ==========================================
-# 2. ENDPOINT MINTA TIKET & POLLING VRP (DILIMIT BIAR CPU AMAN)
+# 3. ENDPOINT MINTA TIKET & POLLING VRP (DILIMIT BIAR CPU AMAN)
 # ==========================================
 @router.post("/routes/optimize/start")
 @limiter.limit("10/hour")
@@ -230,7 +244,7 @@ def check_optimization_status(job_id: str):
     return job_info
 
 # ==========================================
-# 3. ENDPOINT VALIDASI MACET
+# 4. ENDPOINT VALIDASI MACET
 # ==========================================
 @router.post("/routes/validate-traffic/{job_id}")
 def start_traffic_validation(
@@ -246,20 +260,13 @@ def start_traffic_validation(
     return {"status": "success", "message": "Traffic validation dimulai"}
 
 def _run_traffic_validation(job_id: str):
-    """
-    Background traffic validation worker
-    """
     global TRAFFIC_JOBS
-
     try:
         TRAFFIC_JOBS[job_id]["status"] = "processing"
         vrp_job = VRP_JOBS.get(job_id)
 
         if not vrp_job:
-            TRAFFIC_JOBS[job_id] = {
-                "status": "failed",
-                "message": "VRP Job tidak ditemukan"
-            }
+            TRAFFIC_JOBS[job_id] = { "status": "failed", "message": "VRP Job tidak ditemukan" }
             return
 
         routes = vrp_job["data"]["jadwal_truk_internal"]
@@ -274,10 +281,7 @@ def _run_traffic_validation(job_id: str):
         TRAFFIC_JOBS[job_id] = {
             "status": "completed",
             "warnings": all_warnings,
-            "critical_count": len([
-                w for w in all_warnings
-                if w.get("severity") == "HIGH"
-            ])
+            "critical_count": len([w for w in all_warnings if w.get("severity") == "HIGH"])
         }
         print(f"✅ Traffic validation selesai untuk Job {job_id}")
 
