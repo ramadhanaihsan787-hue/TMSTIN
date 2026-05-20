@@ -115,9 +115,7 @@ export default function TruckList({ routesData, selectedRouteId, onSelectRoute, 
                 routesData.map((route) => {
                     const maxCap = 2000;
                     
-                    // 🌟 FIX: Safety fallback kalau properti beda nama dari API
-                    // Kita cek properti camelCase (UI) maupun snake_case (API)
-                    const currentWeight = route.totalWeight ?? (route as any).total_berat ?? 0;
+                    const currentWeight = route.totalWeight ?? (route as any).total_weight ?? (route as any).total_berat ?? 0;
                     const loadPercent = Math.min(Math.round((currentWeight / maxCap) * 100), 100) || 0;
                     const colors = getTruckColors(loadPercent);
                     

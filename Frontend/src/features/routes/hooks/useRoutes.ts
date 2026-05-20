@@ -6,7 +6,7 @@ import type { RouteItem, DroppedNode } from "../types";
 export const useRoutes = () => {
     const [routesData, setRoutesData] = useState<RouteItem[]>([]);
     const [droppedNodes, setDroppedNodes] = useState<DroppedNode[]>([]);
-    const [zonesData, setZonesData] = useState<any[]>([]); 
+    const [zonesData, setZonesData] = useState<any[]>([]);
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -21,7 +21,8 @@ export const useRoutes = () => {
                     const mappedStops = (r.detail_rute || r.detail_perjalanan || []).map((s: any) => ({
                         sequence: s.urutan,
                         storeName: s.nama_toko,
-                        weight: s.berat_kg || s.turun_barang_kg || 0,
+                        weight: s.berat_kg || s.turun_barang_kg || s.weight || 0,
+                        weightKg: s.berat_kg || s.turun_barang_kg || s.weight || 0,
                         arrivalTime: s.jam_tiba || s.jam || "",
                         lat: s.latitude || s.lat || 0,
                         lng: s.longitude || s.lon || 0
@@ -29,27 +30,31 @@ export const useRoutes = () => {
 
                     return {
                         routeId: r.route_id || r.routeId,
+                        vehicle: r.vehicle || r.kendaraan || r.armada || r.jenis_armada || "",
+                        totalWeight: r.total_berat || r.total_weight || r.totalWeight || 0,
+                        capacity: r.capacity || r.kapasitas || r.max_capacity || 1000,
+                        loadFactor: r.load_factor || r.loadFactor || 0,
                         destinationCount: r.destinasi_jumlah || r.destinationCount || mappedStops.length,
                         transportCost: r.transport_cost || r.transportCost || 0,
                         totalDistanceKm: r.total_distance_km || r.totalDistanceKm || 0,
                         driverName: r.nama_driver || r.driver_name || "",
                         plateNumber: r.plat_nomor || r.plate_number || "",
                         stops: mappedStops,
-                        details: mappedStops, 
+                        details: mappedStops,
                         geometry: r.garis_aspal || r.geometry || []
-                    } as unknown as RouteItem; 
+                    } as unknown as RouteItem;
                 });
-                
+
                 setRoutesData(mapped);
                 setDroppedNodes(data.dropped_nodes || []);
-                setZonesData(data.zones || []); 
+                setZonesData(data.zones || []);
                 setSelectedRouteId(mapped[0]?.routeId || null);
             }
         } catch (err) {
             console.error("Gagal mengambil data rute:", err);
             setRoutesData([]);
             setDroppedNodes([]);
-            setZonesData([]); 
+            setZonesData([]);
             setSelectedRouteId(null);
         } finally {
             setIsLoading(false);
@@ -59,9 +64,9 @@ export const useRoutes = () => {
     return {
         routesData,
         droppedNodes,
-        zonesData, 
+        zonesData,
         selectedRouteId,
-        setSelectedRouteId, 
+        setSelectedRouteId,
         isLoading,
         fetchRoutes
     };

@@ -4,7 +4,7 @@ import math
 import logging
 import datetime
 
-from core.config import settings
+from core.config import env_settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,8 @@ def get_dynamic_hybrid_eta(lat1: float, lon1: float, lat2: float, lon2: float, d
         dept_time = now.replace(hour=dept_hour, minute=dept_min, second=0, microsecond=0)
         iso_dept = dept_time.strftime("%Y-%m-%dT%H:%M:%S")
         
-        # 🌟 FIX CTO (QW-8): Gunakan settings.TOMTOM_API_KEY dari .env lu!
-        api_key = getattr(settings, "TOMTOM_API_KEY", "")
+        # 🌟 FIX CTO (QW-8): Gunakan env_settings.TOMTOM_API_KEY dari .env lu!
+        api_key = getattr(env_settings, "TOMTOM_API_KEY", "")
         url = f"https://api.tomtom.com/routing/1/calculateRoute/{lat1},{lon1}:{lat2},{lon2}/json?key={api_key}&departAt={iso_dept}&traffic=true"
         
         res = http_session.get(url, timeout=3)

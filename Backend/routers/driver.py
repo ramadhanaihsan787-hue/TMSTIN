@@ -14,7 +14,7 @@ from services.epod_service import submit_epod_with_ai
 
 import models
 import schemas 
-from dependencies import get_db, get_current_user
+from dependencies import get_db, get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/driver", tags=["Driver App"])

@@ -6,13 +6,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-from core.config import settings
+from core.config import env_settings
 
 # ==========================================
 # 🌟 DATABASE ENGINE WITH CONNECTION POOLING
 # ==========================================
 engine = create_engine(
-    settings.DATABASE_URL,
+    env_settings.DATABASE_URL,
 
     # ==========================================
     # 🌟 CONNECTION POOL SETTINGS

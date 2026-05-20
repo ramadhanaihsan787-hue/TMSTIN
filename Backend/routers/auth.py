@@ -13,7 +13,7 @@ from dependencies import get_db, get_current_user, require_role
 from services.auth_service import AuthService
 from main import limiter  
 
-from core.config import settings
+from core.config import env_settings
 
 router = APIRouter(tags=["Authentication"])
 
@@ -63,7 +63,7 @@ def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(data.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(data.refresh_token, env_settings.SECRET_KEY, algorithms=[env_settings.ALGORITHM])
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
         

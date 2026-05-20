@@ -108,34 +108,36 @@ def get_db():
 
 
 # ============================================================
-# GET SETTINGS — DB-first, cache TTL 10 menit
+# GET SETTINGS — DB-first, cache TTL 10 menit (ANTI-CRASH VERSION)
 # ============================================================
 def get_settings(db: Session = Depends(get_db)) -> models.SystemSettings:
-    """
-    Return settings dari DB (baris system_settings id=1) dengan TTL cache.
-
-    Priority chain:
-      cache masih fresh → return cache
-      cache expire → query DB → update cache → return
-      DB kosong   → seed default → return
-      DB error    → return last cache (fallback, log warning)
-                    kalau cache juga kosong → return ENV defaults
-    """
     global _settings_cache, _settings_cache_at
 
-    # 1. Cache hit
+    # 1. Cache hit (Jalanin paling awal biar hemat resource)
     if _cache_is_fresh():
         return _settings_cache
 
-    # 2. Query DB
+    # 2. Proteksi 'Depends Object': Cek apakah db beneran Session yang punya method 'query'
+    is_valid_db = db is not None and hasattr(db, "query")
+    
+    local_session = None
+    if not is_valid_db:
+        # Kalo fungsi ini dipanggil manual di body router tanpa melempar session,
+        # kita buatin session lokal khusus yang aman.
+        local_session = SessionLocal()
+        db_session = local_session
+    else:
+        db_session = db
+
+    # 3. Query DB
     try:
-        db_settings = db.query(models.SystemSettings).filter(
+        db_settings = db_session.query(models.SystemSettings).filter(
             models.SystemSettings.id == 1
         ).first()
 
         if db_settings is None:
-            # 3. Fresh install: seed default
-            db_settings = _seed_default_settings(db)
+            # Fresh install: seed default (Pastikan pakai db_session yang valid)
+            db_settings = _seed_default_settings(db_session)
 
         # Update cache
         _settings_cache = db_settings
@@ -152,14 +154,17 @@ def get_settings(db: Session = Depends(get_db)) -> models.SystemSettings:
         if _settings_cache is not None:
             return _settings_cache
 
-        # 5. Last resort: return ENV defaults (bukan model, tapi duck-typed)
+        # 5. Last resort: return ENV defaults
         logger.error(
             "[SETTINGS] Cache kosong dan DB tidak bisa diakses. "
             "Menggunakan ENV defaults sebagai last resort."
         )
         return env_settings
-
-
+        
+    finally:
+        # 6. Cleanup: Tutup koneksi HANYA JIKA kita yang bikin session lokalnya
+        if local_session is not None:
+            local_session.close()
 # ============================================================
 # AUTH
 # ============================================================

@@ -106,17 +106,24 @@ def get_routes(
 
         hasil.append({
             "route_id": rute.route_id,
+            "id": rute.route_id,
             "tanggal": str(rute.planning_date),
             "driver_name": rute.driver.name if rute.driver else "-",
             "kendaraan": rute.vehicle.license_plate if rute.vehicle else "-",
+            "armada": rute.vehicle.license_plate if rute.vehicle else "-",
+            "vehicle": rute.vehicle.license_plate if rute.vehicle else "-",
             "jenis": rute.vehicle.type if rute.vehicle else "-",
             "destinasi_jumlah": len(detail_rute),
             "total_berat": rute.total_weight,
+            "total_muatan_kg": rute.total_weight or 0.0,
+            "total_weight": rute.total_weight or 0.0,
             "total_distance_km": rute.total_distance_km,
+            "total_jarak_km": rute.total_distance_km or 0.0,
             "transport_cost": transport_cost,
             "status": "Aktif",
             "zone": zona_dummy[idx_zona],
             "detail_rute": detail_rute,
+            "detail_perjalanan": detail_rute,
             "garis_aspal": garis_aspal,
         })
 
@@ -278,6 +285,7 @@ def confirm_routes(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik")),
 ):
+
     today = datetime.datetime.now().date()
     jadwal = payload.get("jadwal_truk_internal", [])
 
@@ -285,9 +293,7 @@ def confirm_routes(
         raise HTTPException(status_code=400, detail="Tidak ada data rute untuk dikonfirmasi.")
 
     # =====================================================
-    # 🌟 PHASE 1 — VALIDASI SEMUA (TIDAK ADA PERUBAHAN DB)
-    # Karena ini Read-Only, kita ngga butuh transaksi di sini.
-    # Kalau error, fungsi langsung stop dan lempar HTTP 400.
+    # 🌟 PHASE 1 — VALIDASI SEMUA (MEMBUKA TRANSAKSI SECARA OTOMATIS)
     # =====================================================
     used_route_ids: set = set()
 
@@ -314,8 +320,7 @@ def confirm_routes(
         if not driver:
             raise HTTPException(status_code=400, detail=f"Driver ID {drv_id} tidak ditemukan.")
 
-        # Pertahankan logic Helper 103 dari QW sebelumnya
-        if str(hlp_id) in ["103", "0", "", "none", "null"]:
+        if str(hlp_id).lower() in ["103", "0", "", "none", "null"]:
             hlp_id = None
             
         if hlp_id:
@@ -331,96 +336,52 @@ def confirm_routes(
             if not order:
                 raise HTTPException(status_code=400, detail=f"DO '{nomor_do}' tidak ditemukan.")
 
-# =====================================================
-# 🌟 PHASE 2 — EKSEKUSI DATABASE DENGAN UNIT OF WORK
-# =====================================================
-try:
-
-    # 🌟 UNIT OF WORK TRANSACTION
-    with db.begin():
-
-        # =====================================================
+    # =====================================================
+    # 🌟 PHASE 2 — EKSEKUSI DATABASE
+    # (HAPUS `with db.begin():`, gunakan db.commit() dan db.rollback())
+    # =====================================================
+    try:
         # 1. AMBIL SEMUA RUTE LAMA HARI INI
-        # =====================================================
-        existing_routes = db.query(
-            models.TMSRoutePlan
-        ).filter(
+        existing_routes = db.query(models.TMSRoutePlan).filter(
             models.TMSRoutePlan.planning_date == today
         ).all()
 
-        existing_route_ids = [
-            r.route_id for r in existing_routes
-        ]
+        existing_route_ids = [r.route_id for r in existing_routes]
 
-        # =====================================================
         # 2. HAPUS ROUTE LINE DULU (BULK DELETE)
-        # =====================================================
         if existing_route_ids:
-
             db.query(models.TMSRouteLine).filter(
                 models.TMSRouteLine.route_id.in_(existing_route_ids)
             ).delete(synchronize_session=False)
 
-        # =====================================================
         # 3. HAPUS ROUTE PLAN
-        # =====================================================
         db.query(models.TMSRoutePlan).filter(
             models.TMSRoutePlan.planning_date == today
         ).delete(synchronize_session=False)
 
-        # =====================================================
         # 4. INSERT RUTE BARU
-        # =====================================================
         for truk in jadwal:
-
             route_id = truk.get("route_id")
             nopol = truk.get("armada")
 
-            # =====================================================
-            # 🌟 VALIDASI DUPLICATE ROUTE ID
-            # =====================================================
             existing = db.query(models.TMSRoutePlan).filter(
                 models.TMSRoutePlan.route_id == route_id
             ).first()
 
             if existing:
+                raise ValueError(f"Duplicate route_id detected: {route_id}")
 
-                raise ValueError(
-                    f"Duplicate route_id detected: {route_id}"
-                )
-
-            # =====================================================
-            # 🌟 VALIDASI ARMADA
-            # =====================================================
-            vehicle = db.query(
-                models.FleetVehicle
-            ).filter(
+            vehicle = db.query(models.FleetVehicle).filter(
                 models.FleetVehicle.license_plate == nopol
             ).first()
 
             if not vehicle:
+                raise ValueError(f"Armada '{nopol}' tidak ditemukan di master kendaraan!")
 
-                raise ValueError(
-                    f"Armada '{nopol}' tidak ditemukan di master kendaraan!"
-                )
-
-            # =====================================================
-            # 🌟 NORMALISASI HELPER ID
-            # =====================================================
             hlp_id = truk.get("helper_id")
-
-            if str(hlp_id).lower() in [
-                "103",
-                "0",
-                "",
-                "none",
-                "null"
-            ]:
+            if str(hlp_id).lower() in ["103", "0", "", "none", "null"]:
                 hlp_id = None
 
-            # =====================================================
-            # 🌟 CREATE ROUTE PLAN
-            # =====================================================
             new_plan = models.TMSRoutePlan(
                 route_id=route_id,
                 planning_date=today,
@@ -430,151 +391,76 @@ try:
                 total_weight=truk.get("total_muatan_kg", 0),
                 total_distance_km=truk.get("total_jarak_km", 0),
             )
-
             db.add(new_plan)
 
-            # =====================================================
-            # 🌟 INSERT ROUTE LINES
-            # =====================================================
             for stop in truk.get("detail_perjalanan", []):
-
-                nomor_do = (
-                    stop.get("nomor_do")
-                    or stop.get("order_id")
-                    or stop.get("id")
-                )
-
+                nomor_do = stop.get("nomor_do") or stop.get("order_id") or stop.get("id")
                 if not nomor_do:
                     continue
 
-                # =====================================================
-                # 🌟 SAFE ETA PARSER
-                # =====================================================
                 try:
-
-                    jam_parts = str(
-                        stop["jam_tiba"]
-                    ).split(":")
-
-                    jam_est = datetime.time(
-                        hour=int(jam_parts[0]),
-                        minute=int(jam_parts[1])
-                    )
-
+                    jam_parts = str(stop["jam_tiba"]).split(":")
+                    jam_est = datetime.time(hour=int(jam_parts[0]), minute=int(jam_parts[1]))
                 except Exception as e:
-
                     logger.warning(
-                        f"⚠️ Invalid jam_tiba "
-                        f"pada route {route_id}: "
-                        f"{stop.get('jam_tiba')} | {str(e)}"
+                        f"⚠️ Invalid jam_tiba pada route {route_id}: {stop.get('jam_tiba')} | {str(e)}"
                     )
+                    jam_est = datetime.time(hour=12, minute=0)
 
-                    jam_est = datetime.time(
-                        hour=12,
-                        minute=0
-                    )
-
-                # =====================================================
-                # 🌟 CREATE ROUTE LINE
-                # =====================================================
                 route_line = models.TMSRouteLine(
                     route_id=route_id,
                     order_id=nomor_do,
                     sequence=stop.get("urutan", 0),
                     est_arrival=jam_est,
-                    distance_from_prev_km=stop.get(
-                        "distance_from_prev_km",
-                        0
-                    ),
+                    distance_from_prev_km=stop.get("distance_from_prev_km", 0),
                 )
-
                 db.add(route_line)
 
-                # =====================================================
-                # 🌟 VALIDASI ORDER EXISTENCE
-                # =====================================================
-                order = db.query(
-                    models.DeliveryOrder
-                ).filter(
+                order = db.query(models.DeliveryOrder).filter(
                     models.DeliveryOrder.order_id == nomor_do
                 ).first()
 
                 if not order:
+                    raise ValueError(f"Delivery Order '{nomor_do}' tidak ditemukan!")
 
-                    raise ValueError(
-                        f"Delivery Order '{nomor_do}' tidak ditemukan!"
-                    )
+                order.status = models.DOStatus.do_assigned_to_route
 
-                # =====================================================
-                # 🌟 FSM STATUS UPDATE
-                # =====================================================
-                OrderService.update_order_status(
-                    db=db,
-                    order_id=nomor_do,
-                    status=models.DOStatus.do_assigned_to_route
-                )
+        # 🌟 SEMUA PROSES BERHASIL, SAATNYA COMMIT!
+        db.commit()
+        logger.info(f"✅ [CONFIRM] {len(jadwal)} rute dikonfirmasi untuk {today} oleh {current_user.username}")
+
+        return {
+            "message": f"Sukses! {len(jadwal)} rute berhasil dikonfirmasi.",
+            "status": "success"
+        }
 
     # =====================================================
-    # 🌟 AUTO COMMIT SUCCESS
+    # 🌟 DATABASE ERROR (ROLLBACK)
     # =====================================================
-    logger.info(
-        f"✅ [CONFIRM] "
-        f"{len(jadwal)} rute dikonfirmasi "
-        f"untuk {today} oleh {current_user.username}"
-    )
-
-    return {
-        "message": (
-            f"Sukses! "
-            f"{len(jadwal)} rute berhasil dikonfirmasi."
-        ),
-        "status": "success"
-    }
-
-# =====================================================
-# 🌟 DATABASE ERROR
-# =====================================================
-except SQLAlchemyError as db_err:
-
-    logger.error(
-        f"🚨 [DB ERROR] Confirm routes gagal "
-        f"oleh {current_user.username}. "
-        f"Error: {str(db_err)}",
-        exc_info=True
-    )
-
-    raise HTTPException(
-        status_code=500,
-        detail=(
-            "Gagal menyimpan rute ke database. "
-            "Perubahan telah di-rollback."
+    except SQLAlchemyError as db_err:
+        db.rollback() # 🌟 Tarik mundur semua perubahan!
+        logger.error(
+            f"🚨 [DB ERROR] Confirm routes gagal oleh {current_user.username}. Error: {str(db_err)}",
+            exc_info=True
         )
-    )
-
-# =====================================================
-# 🌟 GENERAL ERROR
-# =====================================================
-except Exception as e:
-
-    logger.error(
-        f"🚨 [CONFIRM ROUTES FATAL] "
-        f"Error sistem saat "
-        f"{current_user.username} "
-        f"confirm {len(jadwal)} rute. "
-        f"Error: {str(e)}",
-        exc_info=True
-    )
-
-    raise HTTPException(
-        status_code=500,
-        detail=(
-            "Gagal mengonfirmasi rute. "
-            "Sistem telah otomatis "
-            "me-rollback perubahan "
-            "untuk mencegah korupsi data."
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal menyimpan rute ke database. Perubahan telah di-rollback."
         )
-    )
 
+    # =====================================================
+    # 🌟 GENERAL ERROR (ROLLBACK)
+    # =====================================================
+    except Exception as e:
+        db.rollback() # 🌟 Tarik mundur semua perubahan!
+        logger.error(
+            f"🚨 [CONFIRM ROUTES FATAL] Error sistem saat {current_user.username} confirm {len(jadwal)} rute. Error: {str(e)}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal mengonfirmasi rute. Sistem telah otomatis me-rollback perubahan untuk mencegah korupsi data."
+        )
 # ==========================================
 # 4. EXPORT KE CORPORATE EXCEL TEMPLATE
 # ==========================================

@@ -83,7 +83,7 @@ export default function RouteDetailPanel({ selectedRoute, isFocusMode, onToggleF
                                             <h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">Main Distribution Center</h4>
                                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gudang JAPFA Cikupa</p>
                                             <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 bg-slate-100 dark:bg-[#1A1A1A] text-slate-600 dark:text-slate-300 text-[11px] font-bold rounded">
-                                                <span className="material-symbols-outlined text-xs">inventory</span> TOTAL MUATAN: {selectedRoute.totalWeight || selectedRoute.total_berat || 0} KG
+                                                <span className="material-symbols-outlined text-xs">inventory</span> TOTAL MUATAN: {selectedRoute.totalWeight || selectedRoute.total_berat || selectedRoute.totalWeight || 0} KG
                                             </div>
                                         </div>
                                         <div className="text-right">
@@ -96,7 +96,7 @@ export default function RouteDetailPanel({ selectedRoute, isFocusMode, onToggleF
                                 {/* LOOPING DESTINASI */}
                                 {(selectedRoute.details || selectedRoute.detail_rute || selectedRoute.detail_perjalanan || []).map((stop: any, idx: number) => {
                                     const namaToko = stop.storeName || stop.nama_toko || stop.lokasi || "Toko JAPFA";
-                                    const beratKg = stop.weightKg || stop.berat_kg || stop.turun_barang_kg || 0;
+                                    const beratKg = stop.weight || stop.weightKg || stop.berat_kg || stop.turun_barang_kg || 0;
                                     const jamTiba = stop.arrivalTime || stop.jam_tiba || stop.jam;
                                     const items = stop.items || [];
                                     

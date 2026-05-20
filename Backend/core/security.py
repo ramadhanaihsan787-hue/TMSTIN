@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from jose import jwt
 
 # 🌟 UBAH 1: Panggil 'settings' utuh dari config
-from .config import settings
+from .config import env_settings
 
 # ==========================================
 # PASSWORD CONTEXT
@@ -43,12 +43,12 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expire = datetime.utcnow() + expires_delta
     else:
         # 🌟 UBAH 2: Ambil menit expired dari settings
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(minutes=env_settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     
     # 🌟 UBAH 3: Ambil SECRET_KEY dan ALGORITHM dari settings
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, env_settings.SECRET_KEY, algorithm=env_settings.ALGORITHM)
     
     return encoded_jwt
 
@@ -59,7 +59,7 @@ def decode_token(token: str) -> dict:
     """
     try:
         # 🌟 UBAH 4: Ambil SECRET_KEY dan ALGORITHM dari settings
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, env_settings.SECRET_KEY, algorithms=[env_settings.ALGORITHM])
         
         # 🌟 FIX ISSUE #10: DOUBLE-CHECK PROTECTION (Validasi Manual Epoch Timestamp)
         exp_time = payload.get("exp")

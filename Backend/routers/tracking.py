@@ -9,7 +9,7 @@ import logging
 from services.tracking_service import process_gps_webhook
 from dependencies import get_db
 
-from core.config import settings
+from core.config import env_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tracking", tags=["GPS Tracking Webhook"])
@@ -28,7 +28,7 @@ class GPSWebhookPayload(BaseModel):
 # 🌟 SATPAM WEBHOOK
 # ==========================================
 def verify_gps_vendor(x_api_key: Optional[str] = Header(None)):
-    rahasia_vendor = getattr(settings, "GPS_WEBHOOK_SECRET", "JAPFA-GPS-SECRET-2026")
+    rahasia_vendor = getattr(env_settings, "GPS_WEBHOOK_SECRET", "JAPFA-GPS-SECRET-2026")
     
     if not x_api_key or x_api_key != rahasia_vendor:
         logger.warning(f"🚨 [SECURITY] Ada percobaan nembak GPS tanpa API Key yang valid! Key masuk: {x_api_key}")
