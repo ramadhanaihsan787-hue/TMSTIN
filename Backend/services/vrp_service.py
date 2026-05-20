@@ -1,6 +1,7 @@
 # services/vrp_service.py
 from typing import List, Dict, Any
 import datetime
+from utils.helpers import time_str_to_minutes
 # Import solver yang udah lu bikin tadi
 from services import vrp_solver
 
@@ -44,7 +45,7 @@ class VRPService:
             "capacities": [
                 int(v.capacity_kg * (getattr(settings, "vrp_capacity_buffer_percent", 90) / 100.0))
                 for v in vehicles
-            ]
+            ], # <--- 🌟 INI DIA KOMANYA BOS! Tadi lu lupa naruh ini doang wkwk
             "num_vehicles": len(vehicles),
             "time_windows": time_windows,
             "is_mall_list": is_mall_list,
