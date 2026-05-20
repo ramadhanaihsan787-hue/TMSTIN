@@ -1,6 +1,6 @@
 # Backend/routers/orders.py
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload  # 🌟 FIX: Ditambahkan joinedload agar tidak NameError
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -9,66 +9,23 @@ import models
 import schemas
 from dependencies import get_db, get_settings, get_current_user, require_role
 from services import order_import_service
-from services.order_service import OrderService, OrderServiceError, OrderNotFoundError, OrderValidationError
-from main import limiter  # 🌟 Import limiter untuk pembatasan traffic CPU/Spam
+from services.order_service import (
+    OrderService,
+    OrderServiceError,
+    OrderNotFoundError,
+    OrderValidationError,
+)
+from services.order_fsm import validate_status_transition  
+from main import limiter  
 
-# =======================================================
-# 🌟 ORDER STATUS STATE MACHINE
-# =======================================================
+import pandas as pd
+import logging
 
-VALID_TRANSITIONS = {
-    models.DOStatus.so_waiting_verification: [
-        models.DOStatus.do_verified
-    ],
-
-    models.DOStatus.do_verified: [
-        models.DOStatus.do_assigned_to_route
-    ],
-
-    models.DOStatus.do_assigned_to_route: [
-        models.DOStatus.delivered_pod_uploaded,
-        models.DOStatus.cancelled
-    ],
-
-    models.DOStatus.delivered_pod_uploaded: [
-        models.DOStatus.delivered_success,
-        models.DOStatus.delivered_partial,
-        models.DOStatus.do_assigned_to_route
-    ],
-
-    models.DOStatus.delivered_success: [
-        models.DOStatus.billed
-    ],
-
-    models.DOStatus.delivered_partial: [
-        models.DOStatus.billed
-    ],
-
-    models.DOStatus.cancelled: [],
-
-    models.DOStatus.billed: []
-}
-
-# =======================================================
-# 🌟 FSM VALIDATOR
-# =======================================================
-
-def validate_status_transition(current_status, new_status):
-    allowed = VALID_TRANSITIONS.get(current_status, [])
-    
-    if new_status not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid status transition: "
-                f"{current_status.value} → {new_status.value}"
-            )
-        )
+logger = logging.getLogger(__name__)
 
 # =======================================================
 # ROUTER CONFIG
 # =======================================================
-
 router = APIRouter(prefix="/api", tags=["Orders & Delivery"])
 
 class TimeUpdateRequest(BaseModel):
@@ -84,7 +41,7 @@ class WeightUpdateRequest(BaseModel):
     weight: float
 
 # =======================================================
-# 🌟 UPLOAD SAP FILE DENGAN RATE LIMITER (Anti Spam & Duplikat)
+# 🌟 UPLOAD SAP FILE DENGAN RATE LIMITER
 # =======================================================
 @router.post("/orders/upload", response_model=schemas.UploadResponse)
 @limiter.limit("5/hour")
@@ -105,9 +62,17 @@ async def upload_sap_file(
             "failed_list": failed_list
         }
     except ValueError as ve:
+        # Menangkap error validasi nilai data
+        logger.error(f"⚠️ [UPLOAD SAP] Validation error oleh {current_user.username} di file {file.filename}: {str(ve)}")
         raise HTTPException(status_code=400, detail=str(ve))
+    except pd.errors.EmptyDataError:
+        # Menangkap error kalau file Excel/CSV kosong
+        logger.error(f"⚠️ [UPLOAD SAP] File kosong diupload oleh {current_user.username} ({file.filename})")
+        raise HTTPException(status_code=400, detail="File SAP yang diupload kosong atau formatnya tidak dikenali.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gagal proses file: {str(e)}")
+        # Fallback terakhir, tapi SEKARANG KITA LOG TRACEBACK-NYA FULL
+        logger.error(f"🚨 [UPLOAD SAP FATAL] Gagal proses file {file.filename} oleh {current_user.username}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan internal pada server saat memproses file.")
 
 # =======================================================
 # UPDATE OPERATIONS
@@ -118,7 +83,7 @@ def update_time_window(
 ):
     try:
         order = OrderService.update_time_window(db, order_id, data.jam_maksimal)
-        db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
+        db.commit() 
         
         toko_name = order.customer.store_name if order.customer else "Toko"
         return {"message": f"Batas waktu {toko_name} diubah ke {data.jam_maksimal}", "order_id": order_id, "new_window_end": order.delivery_window_end}
@@ -135,7 +100,7 @@ def update_coordinate(
 ):
     try:
         OrderService.update_coordinate(db, order_id, data.latitude, data.longitude, data.kode_customer, data.nama_customer)
-        db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
+        db.commit() 
         
         if order_id.startswith("DRAFT-"):
             return {"message": "Koordinat DRAFT berhasil disimpan ke Master Database!", "order_id": order_id}
@@ -145,14 +110,22 @@ def update_coordinate(
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.put("/orders/{order_id}/weight", response_model=schemas.OrderActionResponse)
-def update_weight(order_id: str, data: WeightUpdateRequest, db: Session = Depends(get_db)):
+def update_weight(
+    order_id: str,
+    data: WeightUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik")),
+):
     try:
         OrderService.update_weight(db, order_id, data.weight)
-        db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
+        db.commit()
         return {"message": "Berat berhasil diupdate!", "order_id": order_id}
     except OrderNotFoundError as e:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
+    except OrderValidationError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 # =======================================================
 # APPROVE / REJECT POD DENGAN FSM VALIDATOR
@@ -162,7 +135,6 @@ def approve_pod(
     order_id: str, data: schemas.PodApproveRequest, db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))
 ):
     try:
-        # FSM Validator Check
         existing_order = db.query(models.DeliveryOrder).filter(
             models.DeliveryOrder.order_id == order_id
         ).first()
@@ -172,12 +144,15 @@ def approve_pod(
 
         validate_status_transition(
             existing_order.status,
-            models.DOStatus.delivered_success
+            models.DOStatus.billed
         )
 
         order = OrderService.approve_pod(db, order_id)
-        db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
+        db.commit()
         return {"status": "success", "message": f"POD untuk DO {order_id} BERHASIL DISETUJUI!", "order_id": order_id, "new_status": order.status.value}
+    except HTTPException:
+        db.rollback()
+        raise
     except OrderNotFoundError as e:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
@@ -190,7 +165,6 @@ def reject_pod(
     order_id: str, data: schemas.PodRejectRequest, db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))
 ):
     try:
-        # FSM Validator Check
         existing_order = db.query(models.DeliveryOrder).filter(
             models.DeliveryOrder.order_id == order_id
         ).first()
@@ -204,8 +178,11 @@ def reject_pod(
         )
 
         order = OrderService.reject_pod(db, order_id, data.reason, data.notes)
-        db.commit() # 🌟 KASIR MENCET TOMBOL BAYAR!
+        db.commit()
         return {"status": "success", "message": f"POD untuk DO {order_id} DITOLAK! Alasan: {data.reason}", "order_id": order_id, "new_status": order.status.value}
+    except HTTPException:
+        db.rollback()
+        raise
     except OrderNotFoundError as e:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
@@ -218,7 +195,10 @@ def reject_pod(
 # =======================================================
 @router.get("/orders", response_model=schemas.PendingOrderResponse)
 def get_pending_orders(status: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    query = db.query(models.DeliveryOrder)
+    query = db.query(models.DeliveryOrder).options(
+        joinedload(models.DeliveryOrder.customer)
+    )
+    
     if status:
         try: query = query.filter(models.DeliveryOrder.status == models.DOStatus(status))
         except ValueError: pass
@@ -237,7 +217,14 @@ def get_pending_orders(status: Optional[str] = None, db: Session = Depends(get_d
 
 @router.get("/pod/verifications")
 def get_pod_verifications(db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))):
-    orders = db.query(models.DeliveryOrder).filter(models.DeliveryOrder.status == models.DOStatus.delivered_pod_uploaded).all()
+    orders = db.query(models.DeliveryOrder).options(
+        joinedload(models.DeliveryOrder.customer),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.epod),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.route_plan).joinedload(models.TMSRoutePlan.driver),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.route_plan).joinedload(models.TMSRoutePlan.vehicle)
+    ).filter(
+        models.DeliveryOrder.status == models.DOStatus.delivered_pod_uploaded
+    ).all()
     
     data = []
     for o in orders:
@@ -266,7 +253,12 @@ def get_pod_verifications(db: Session = Depends(get_db), current_user: models.Us
 
 @router.get("/pod/history")
 def get_pod_history(status: Optional[str] = None, search: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))):
-    query = db.query(models.DeliveryOrder).filter(
+    query = db.query(models.DeliveryOrder).options(
+        joinedload(models.DeliveryOrder.customer),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.epod),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.route_plan).joinedload(models.TMSRoutePlan.driver),
+        joinedload(models.DeliveryOrder.route_line).joinedload(models.TMSRouteLine.route_plan).joinedload(models.TMSRoutePlan.vehicle)
+    ).filter(
         models.DeliveryOrder.status.in_([models.DOStatus.billed, models.DOStatus.delivered_success, models.DOStatus.delivered_partial])
     )
     

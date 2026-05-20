@@ -104,3 +104,5 @@ Backend/data/
 
 # 16. Ignore sensitive scripts and seeders
 Backend/scripts/
+
+Backend/templates/

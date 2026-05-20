@@ -352,20 +352,29 @@ class PendingOrderResponse(BaseModel):
 # ⚙️ SYSTEM SETTINGS SCHEMAS
 # ==========================================
 class SystemSettingsUpdate(BaseModel):
+    # VRP & Routing
     vrp_start_time: str
     vrp_end_time: str
     vrp_base_drop_time_mins: int
     vrp_var_drop_time_mins: int
     vrp_capacity_buffer_percent: int
+    # Koordinat Depo
+    depo_lat: float
+    depo_lon: float
+    # Biaya Operasional
     cost_fuel_per_liter: float
     cost_avg_km_per_liter: float
     cost_driver_salary: float
     cost_overtime_rate: float
-    depo_lat: float
-    depo_lon: float
+    # Geofencing & Anomali (MR-2: field baru)
+    geofence_radius_meters: int = 200
+    dwell_time_mins: int = 3
+    anomaly_tolerance_percent: float = 200.0
+    # IoT & Webhook
     api_gps_webhook: Optional[str] = None
     api_temp_sensor: Optional[str] = None
     sync_interval_sec: int
+    # Alerts
     alert_max_temp_celsius: float
     alert_delay_mins: int
     alert_channel_dashboard: bool = True

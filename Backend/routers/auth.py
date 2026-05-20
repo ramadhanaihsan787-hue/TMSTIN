@@ -5,22 +5,15 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
 
-# Kita butuh jwt buat bongkar token refresh-nya
 from jose import jwt, JWTError
 
 import models
 import schemas 
 from dependencies import get_db, get_current_user, require_role
 from services.auth_service import AuthService
-from main import limiter  # 🌟 Aman, karena di main.py bendanya dibuat duluan sekarang
+from main import limiter  
 
-# 🌟 Coba tarik SECRET_KEY dari modul security lu
-try:
-    from core.security import SECRET_KEY, ALGORITHM
-except ImportError:
-    # Fallback kalau ga nemu
-    SECRET_KEY = "SECRET_KEY_RAHASIA_LU_YANG_ADA_DI_ENV"
-    ALGORITHM = "HS256"
+from core.config import settings
 
 router = APIRouter(tags=["Authentication"])
 
@@ -70,8 +63,7 @@ def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Bongkar tokennya
-        payload = jwt.decode(data.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(data.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
         

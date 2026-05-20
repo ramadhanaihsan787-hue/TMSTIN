@@ -1,8 +1,9 @@
 import axios from "axios";
 
 export const api = axios.create({
-  // 🌟 KEMBALI KE LAPTOP! Tembak langsung ke Uvicorn!
-  baseURL: "http://localhost:8000", 
+  // 🌟 FIX CTO (QW-5): Jangan kunci ke localhost! Baca dari .env Vite
+  // Kalau VITE_API_URL ngga ada (misal pas dev), fallback ke localhost:8000
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000", 
   timeout: 30000,
   headers: {
     "Content-Type": "application/json"

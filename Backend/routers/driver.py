@@ -342,14 +342,18 @@ async def submit_epod(
 # 4. AMBIL DAFTAR SUPIR & HELPER (UNTUK ADMIN DISTRIBUSI)
 # ==========================================
 @router.get("/list/available")
-def get_available_crew(db: Session = Depends(get_db)):
+def get_available_crew(
+    db: Session = Depends(get_db),
+    # 🌟 FIX CTO (QW-10): Pasang gembok!
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+):
     try:
         all_crew = db.query(models.HRDriver).filter(models.HRDriver.status == True).all()
         
-        drivers = [{"id": d.driver_id, "name": d.name} for d in all_crew if not d.is_helper]
-        helpers = [{"id": d.driver_id, "name": d.name} for d in all_crew if d.is_helper]
+        drivers = [{"id": d.driver_id, "name": d.name} for d in all_crew]
+        helpers = [{"id": d.driver_id, "name": d.name} for d in all_crew]
         
-        helpers.insert(0, {"id": 9999, "name": "Tanpa Helper"})
+        helpers.insert(0, {"id": "none", "name": "Tanpa Helper"})
         
         return {
             "status": "success",
@@ -365,9 +369,14 @@ def get_available_crew(db: Session = Depends(get_db)):
 # 5. JEMBATAN UNTUK KASIR (TRUK YANG JALAN HARI INI)
 # ==========================================
 @router.get("/active-dispatch")
-def get_today_active_dispatch(db: Session = Depends(get_db)):
+def get_today_active_dispatch(
+    db: Session = Depends(get_db),
+    # 🌟 FIX CTO (QW-10): Pasang gembok!
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+):
     try:
-        today = datetime.date.today()
+        # 🌟 FIX CTO (QW-3): Benerin typo 'datetime.date.today()'. Pake 'date.today()' aja!
+        today = date.today()
         active_routes = db.query(models.TMSRoutePlan).filter(
             models.TMSRoutePlan.planning_date == today
         ).all()
@@ -379,7 +388,6 @@ def get_today_active_dispatch(db: Session = Depends(get_db)):
             dispatches.append({
                 "plate": rute.vehicle.license_plate,
                 "vehicleType": rute.vehicle.type,
-                # 🌟 FIX CTO: Hilangkan hasattr
                 "driver": rute.driver.name if rute.driver else "",
                 "helper": rute.helper.name if rute.helper else ""
             })
@@ -392,7 +400,11 @@ def get_today_active_dispatch(db: Session = Depends(get_db)):
 # 6. JEMBATAN UNTUK ANALYTICS (PERFORMA SUPIR)
 # ==========================================
 @router.get("/performance")
-def get_driver_performance(db: Session = Depends(get_db)):
+def get_driver_performance(
+    db: Session = Depends(get_db),
+    # 🌟 FIX CTO (QW-10): Pasang gembok!
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+):
     try:
         drivers = db.query(models.HRDriver).filter(models.HRDriver.is_helper == False).all()
         

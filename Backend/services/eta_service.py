@@ -4,17 +4,14 @@ import math
 import logging
 import datetime
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
-TOMTOM_API_KEY = "TARUH_API_KEY_TOMTOM_LU_DISINI"
-
-# 🌟 FIX CTO 1: GLOBAL MEMORY CACHE (Hemat Kuota & Cepat!)
 ETA_CACHE = {}
 
-# 🌟 FIX CTO 2: HTTP CONNECTION POOLING (Anti Lelet!)
 http_session = requests.Session()
 
-# 🌟 KAMUS KEMACETAN JABODETABEK
 TRAFFIC_MULTIPLIERS = {    
     (0, 5):   1.0,   
     (5, 7):   1.15,  
@@ -47,7 +44,6 @@ def get_dynamic_hybrid_eta(lat1: float, lon1: float, lat2: float, lon2: float, d
     dept_hour = int((departure_time_minutes // 60) % 24)
     
     # 🌟 CEK BRANKAS CACHE DULU SEBELUM KERJA KERAS!
-    # Bikin kunci unik berdasarkan Koordinat (Pecahan 4 desimal = akurasi ~11 meter) & Jam Berangkat
     cache_key = (
         round(lat1, 4), round(lon1, 4), 
         round(lat2, 4), round(lon2, 4), 
@@ -71,9 +67,10 @@ def get_dynamic_hybrid_eta(lat1: float, lon1: float, lat2: float, lon2: float, d
         dept_time = now.replace(hour=dept_hour, minute=dept_min, second=0, microsecond=0)
         iso_dept = dept_time.strftime("%Y-%m-%dT%H:%M:%S")
         
-        url = f"https://api.tomtom.com/routing/1/calculateRoute/{lat1},{lon1}:{lat2},{lon2}/json?key={TOMTOM_API_KEY}&departAt={iso_dept}&traffic=true"
+        # 🌟 FIX CTO (QW-8): Gunakan settings.TOMTOM_API_KEY dari .env lu!
+        api_key = getattr(settings, "TOMTOM_API_KEY", "")
+        url = f"https://api.tomtom.com/routing/1/calculateRoute/{lat1},{lon1}:{lat2},{lon2}/json?key={api_key}&departAt={iso_dept}&traffic=true"
         
-        # 🌟 Pakai session.get(), BUKAN requests.get() biasa (Super Cepat!)
         res = http_session.get(url, timeout=3)
         if res.status_code == 200:
             data = res.json()

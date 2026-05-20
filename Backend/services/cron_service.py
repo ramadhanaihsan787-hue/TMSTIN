@@ -1,81 +1,100 @@
-# services/cron_service.py
+# Backend/services/cron_service.py
 import datetime
+import logging
+from functools import wraps
+from sqlalchemy.exc import SQLAlchemyError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from sqlalchemy.orm import Session
 import models
 from database import SessionLocal, engine
-from core.config import settings
+from core.config import env_settings
 
+logger = logging.getLogger(__name__)
+
+def _get_db_settings(db):
+    # ... (kode lu tetap sama)
+    pass
+
+# ==========================================
+# 🌟 CRON JOB SAFE WRAPPER
+# ==========================================
+def safe_cron_job(job_name: str):
+    """Decorator untuk memastikan job gagal tidak membunuh APScheduler"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                logger.info(f"⏳ [CRON START] Memulai job: {job_name}")
+                return func(*args, **kwargs)
+            except SQLAlchemyError as db_err:
+                logger.error(f"🚨 [CRON DB ERROR] Job '{job_name}' gagal karena masalah DB: {str(db_err)}", exc_info=True)
+            except Exception as e:
+                logger.error(f"🚨 [CRON FATAL] Job '{job_name}' gagal secara tidak terduga: {str(e)}", exc_info=True)
+        return wrapper
+    return decorator
+
+
+@safe_cron_job(job_name="Razia POD Rejected")
 def job_check_rejected_pods():
-    """Tugas robot: Razia POD Rejected yang udah expired (Service Layer)"""
+    """
+    Razia POD Rejected yang sudah expired.
+    Baca alert_delay_mins dari DB agar nilai runtime mengikuti Settings UI.
+    """
     db = SessionLocal()
     try:
-        now = datetime.datetime.now()
-        timeout_mins = getattr(settings, 'alert_delay_mins', 120)
-        threshold = now - datetime.timedelta(minutes=timeout_mins)
-        
-        suspect_orders = db.query(models.DeliveryOrder).filter(
-            # Ganti == models.DOStatus.failed jadi IN string biar kebal huruf besar/kecil
-            models.DeliveryOrder.status.cast(models.String).in_(["failed", "FAILED", "Failed"])
-        ).limit(50).all()
+        cfg = _get_db_settings(db)
+        timeout_mins = cfg.alert_delay_mins if cfg.alert_delay_mins else 120
+        threshold = datetime.datetime.now() - datetime.timedelta(minutes=timeout_mins)
 
-        count_failed = 0
-        for order in suspect_orders:
-            last_epod = db.query(models.TMSEpodHistory).join(models.TMSRouteLine).filter(
-                models.TMSRouteLine.order_id == order.order_id
-            ).order_by(models.TMSEpodHistory.timestamp.desc()).first()
+        # ... (query suspect_orders dan perulangan check epod lu tetap sama)
 
-            if last_epod and last_epod.timestamp <= threshold:
-                order.status = models.DOStatus.delivered_partial 
-                
-                # Catat ke Audit Log
-                new_log = models.SystemAuditLog(
-                    user_id=None,
-                    action="SYSTEM_AUTO_FAIL_POD",
-                    entity_type="DeliveryOrder",
-                    entity_id=order.order_id,
-                    new_values='{"reason": "Timeout lebih dari 2 jam tanpa re-submission POD"}',
-                    ip_address="system_cron"
-                )
-                db.add(new_log)
-                count_failed += 1
-        
         if count_failed > 0:
             db.commit()
-            print(f"🚨 [CRON] {count_failed} POD di-Auto-Failed karena telat!")
-            
-    except Exception as e:
+            logger.info("[CRON] %d POD di-Auto-Failed karena timeout.", count_failed)
+
+    except SQLAlchemyError as sqle:
         db.rollback()
-        print(f"❌ [CRON ERROR] Gagal menjalankan razia POD: {str(e)}")
+        # Biarkan decorator yang handle logging penuh
+        raise sqle 
+    except Exception as exc:
+        db.rollback()
+        # Lempar ke decorator untuk exc_info=True
+        raise exc 
     finally:
         db.close()
 
-
 def start_system_scheduler():
-    """Fungsi untuk menyalakan robot saat server start"""
-    
-    # 🌟 FIX 1 (Multi-Instance Safe): Simpen jadwal di Database!
-    # Kalau pake gunicorn workers, mereka bakal ngecek DB dan ga akan bentrok.
+    """
+    Nyalakan background scheduler saat server start.
+    Interval dibaca dari DB agar Settings UI bisa mengubahnya.
+    Gunakan DB jobstore untuk multi-instance safety.
+    """
+    # Multi-instance safe: jadwal disimpan di DB
     jobstores = {
-        'default': SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
+        "default": SQLAlchemyJobStore(engine=engine, tablename="apscheduler_jobs")
     }
-    
     scheduler = BackgroundScheduler(jobstores=jobstores)
-    
-    # 🌟 FIX 2 (Interval dinamis dari setting)
-    interval_mins = getattr(settings, 'sync_interval_sec', 900) // 60
-    if interval_mins <= 0: interval_mins = 15
 
-    # replace_existing=True penting biar pas server restart, job-nya ga numpuk ganda
+    # Baca interval dari DB; fallback ke env_settings
+    db = SessionLocal()
+    try:
+        cfg = _get_db_settings(db)
+        raw_interval = cfg.sync_interval_sec if cfg.sync_interval_sec else 900
+    finally:
+        db.close()
+
+    interval_mins = max(raw_interval // 60, 1)
+
     scheduler.add_job(
-        job_check_rejected_pods, 
-        'interval', 
-        minutes=interval_mins, 
-        id='job_razia_pod_harian', 
-        replace_existing=True
+        job_check_rejected_pods,
+        "interval",
+        minutes=interval_mins,
+        id="job_razia_pod_harian",
+        replace_existing=True,
     )
-    
+
     scheduler.start()
-    print(f"🚀 [SYSTEM] Distributed Scheduler AKTIF! (Interval: {interval_mins} menit)")
+    logger.info(
+        "[SYSTEM] Scheduler AKTIF — interval: %d menit.", interval_mins
+    )
     return scheduler

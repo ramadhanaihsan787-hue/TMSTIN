@@ -1,88 +1,94 @@
 # Backend/main.py
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
-from contextlib import asynccontextmanager
-import os
+from fastapi.staticfiles import StaticFiles
 
-# 🌟 1. IMPORT SATPAM ANTI-DDoS (SLOWAPI)
+# 1. RATE LIMITER — inisialisasi SEBELUM import routers (cegah circular import)
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-# 🌟 2. INISIALISASI LIMITER DI SINI (Wajib sebelum import routers biar gak Circular Import!)
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
-# FIX CTO POINT 5: CRON SERVICE IMPORT (Supaya main.py bersih)
-from services.cron_service import start_system_scheduler
-
-# Core & Config
-from core.config import settings
+# 2. INTERNAL IMPORTS (urutan penting: config → db → services → routers)
+from core.config import env_settings as settings  # infra-only fields (APP_NAME, UPLOAD_DIR, dll)
 from core.exceptions import setup_exception_handlers
 
-# Database
-from database import engine, Base
+# [QW-9] Database: Base.metadata.create_all() DIHAPUS dari sini.
+# Schema dikelola SEPENUHNYA oleh Alembic.
+# Sebelum start server pertama kali / deploy baru, WAJIB jalankan:
+#   alembic upgrade head
+# Untuk Docker, tambahkan di entrypoint.sh:
+#   alembic upgrade head && uvicorn main:app ...
+from database import engine  # noqa: F401 — engine tetap diimport untuk koneksi pool
 
-# 🌟 3. BARU KITA IMPORT ROUTERS AMAN JAYA
+from services.cron_service import start_system_scheduler
+
 from routers import (
-    auth as auth_router,
-    orders as orders_router,
-    vrp_jobs as vrp_jobs_router,
-    vrp_routes as vrp_routes_router,
-    fleet as fleet_router,
     analytics as analytics_router,
-    dashboard as dashboard_router,
-    settings as settings_router,
+    auth as auth_router,
     customer as customer_router,
+    dashboard as dashboard_router,
     driver as driver_router,
     finance as finance_router,
-    tracking as tracking_router
+    fleet as fleet_router,
+    orders as orders_router,
+    settings as settings_router,
+    tracking as tracking_router,
+    vrp_jobs as vrp_jobs_router,
+    vrp_routes as vrp_routes_router,
 )
 
-# ==========================================
-# 1. CREATE TABLES (DATABASE)
-# ==========================================
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
 
 # ==========================================
-# 🌟 SUNTIKAN CTO POINT 5: LIFESPAN
+# LIFESPAN — startup & shutdown hooks
 # ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- STARTUP EVENT ---
-    # Nyalain robot background dari file services/cron_service.py
+    # --- STARTUP ---
+    logger.info("🚀 [SYSTEM] TMS JAPFA starting up...")
+    logger.info(
+        "ℹ️  [DB] Schema dikelola Alembic. "
+        "Pastikan 'alembic upgrade head' sudah dijalankan sebelum server ini."
+    )
     scheduler = start_system_scheduler()
-    
-    yield # <-- Aplikasi FastAPI jalan selama posisi ini
-    
-    # --- SHUTDOWN EVENT ---
+
+    yield  # app berjalan di sini
+
+    # --- SHUTDOWN ---
     scheduler.shutdown()
-    print("🛑 [SYSTEM] Robot Background Worker dimatikan.")
+    logger.info("🛑 [SYSTEM] Background scheduler dimatikan.")
 
 
 # ==========================================
-# 2. INITIALIZE APP
+# APP INITIALIZATION
 # ==========================================
 app = FastAPI(
     title=settings.APP_NAME,
     description=settings.APP_DESCRIPTION,
     version=settings.APP_VERSION,
-    lifespan=lifespan # 🌟 TEMPELIN LIFESPAN DI SINI
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 setup_exception_handlers(app)
 
+
 # ==========================================
-# 3. MIDDLEWARE (CORS) & STATIC FILES
+# CORS & STATIC FILES
 # ==========================================
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://localhost:5173", 
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
@@ -90,9 +96,9 @@ ALLOWED_ORIGINS = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS, 
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], 
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -100,8 +106,9 @@ os.makedirs("static/uploads/epod", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
+
 # ==========================================
-# 4. CUSTOM OPENAPI (BEARER TOKEN)
+# OPENAPI — tambahkan BearerAuth scheme
 # ==========================================
 def custom_openapi():
     if app.openapi_schema:
@@ -116,33 +123,36 @@ def custom_openapi():
         "BearerAuth": {
             "type": "http",
             "scheme": "bearer",
-            "bearerFormat": "JWT"
+            "bearerFormat": "JWT",
         }
     }
     openapi_schema["security"] = [{"BearerAuth": []}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
 
-# ==========================================
-# 5. INCLUDE ROUTERS
-# ==========================================
-app.include_router(auth_router.router, tags=["Authentication"])
-app.include_router(orders_router.router, tags=["Orders"])
-app.include_router(vrp_jobs_router.router, tags=["VRP Jobs"])
-app.include_router(vrp_routes_router.router, tags=["VRP Routes"])
-app.include_router(fleet_router.router, tags=["Fleet"])
-app.include_router(analytics_router.router, tags=["Analytics"])
-app.include_router(dashboard_router.router, tags=["Dashboard"])
-app.include_router(settings_router.router, tags=["Settings"])
-app.include_router(customer_router.router, tags=["Customers"])
-app.include_router(driver_router.router, tags=["Drivers"])
-app.include_router(finance_router.router, tags=["Finance & Expenses"])
-app.include_router(tracking_router.router, tags=["Tracking"])
 
 # ==========================================
-# 6. SYSTEM ENDPOINTS
+# ROUTERS
+# ==========================================
+app.include_router(auth_router.router,         tags=["Authentication"])
+app.include_router(orders_router.router,       tags=["Orders"])
+app.include_router(vrp_jobs_router.router,     tags=["VRP Jobs"])
+app.include_router(vrp_routes_router.router,   tags=["VRP Routes"])
+app.include_router(fleet_router.router,        tags=["Fleet"])
+app.include_router(analytics_router.router,    tags=["Analytics"])
+app.include_router(dashboard_router.router,    tags=["Dashboard"])
+app.include_router(settings_router.router,     tags=["Settings"])
+app.include_router(customer_router.router,     tags=["Customers"])
+app.include_router(driver_router.router,       tags=["Drivers"])
+app.include_router(finance_router.router,      tags=["Finance & Expenses"])
+app.include_router(tracking_router.router,     tags=["Tracking"])
+
+
+# ==========================================
+# SYSTEM ENDPOINTS
 # ==========================================
 @app.get("/health", tags=["System"])
 @limiter.limit("5/minute")
@@ -150,8 +160,9 @@ def health_check(request: Request):
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
-        "version": settings.APP_VERSION
+        "version": settings.APP_VERSION,
     }
+
 
 @app.get("/", tags=["System"])
 def read_root(request: Request):
@@ -159,5 +170,5 @@ def read_root(request: Request):
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }

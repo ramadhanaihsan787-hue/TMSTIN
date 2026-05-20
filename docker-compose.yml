@@ -2,21 +2,24 @@ version: '3.9'
 
 services:
   # ==========================================
-  # DATABASE - PostgreSQL 12
+  # DATABASE - PostgreSQL 16
+  # [MR-14] Upgrade dari postgres:12-alpine → postgres:16-alpine
   # ==========================================
   postgres:
-    image: postgres:12-alpine
+    image: postgres:16-alpine
     container_name: tms-japfa-db
     environment:
       POSTGRES_DB: tms_japfa
       POSTGRES_USER: japfa_user
-      # 🌟 FIX CTO: Biar makin aman, password DB juga mending tarik dari .env nanti!
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-japfa_password_change_me} 
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-japfa_password_change_me}
       TZ: 'Asia/Jakarta'
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # [MR-14] Mount custom postgresql.conf untuk log query lambat & tuning
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U japfa_user -d tms_japfa"]
       interval: 10s
@@ -24,6 +27,7 @@ services:
       retries: 5
     networks:
       - tms-network
+    restart: unless-stopped
 
   # ==========================================
   # BACKEND - FastAPI (Port 8000)
@@ -37,24 +41,15 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      # 🌟 Database Configuration
       DATABASE_URL: postgresql://japfa_user:${POSTGRES_PASSWORD:-japfa_password_change_me}@postgres:5432/tms_japfa
-      
-      # 🌟 FIX CTO POINT 1: JWT & Security ditarik dari Host OS / .env file!
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 120 # Ngikutin yang tadi kita ganti 2 jam
-      
-      # 🌟 Application
+      ACCESS_TOKEN_EXPIRE_MINUTES: 120
       APP_NAME: "TMS JAPFA - AI Engine"
       APP_VERSION: "2.0.0"
       APP_DESCRIPTION: "Transport Management System dengan CVRPTW Optimization"
       DEBUG: "false"
-      
-      # 🌟 API Keys
       TOMTOM_API_KEY: ${TOMTOM_API_KEY:-your-tomtom-api-key-here}
-      
-      # 🌟 VRP Configuration
       depo_lat: ${depo_lat}
       depo_lon: ${depo_lon}
       vrp_start_time: "07:00"
@@ -62,18 +57,13 @@ services:
       vrp_base_drop_time_mins: 15
       vrp_var_drop_time_mins: 1
       vrp_capacity_buffer_percent: 90
-      
-      # 🌟 File Upload
       UPLOAD_DIR: uploads
       EPOD_DIR: uploads/epod
       GEOMETRY_DIR: route_geometries
-      
-      # 🌟 Cost Configuration
       cost_fuel_per_liter: 12500.0
       cost_avg_km_per_liter: 5.0
       cost_driver_salary: 4500000.0
       cost_overtime_rate: 25000.0
-      
       PYTHONUNBUFFERED: 1
     ports:
       - "8000:8000"
@@ -81,11 +71,8 @@ services:
       - ./Backend:/app
       - ./Backend/uploads:/app/uploads
       - ./Backend/route_geometries:/app/route_geometries
-    
-    # 🌟 FIX CTO POINT 1: Hapus --reload buat Production. 
-    # (Opsional) Kalo mau makin ngebut di server, ntar lu tambahin: --workers 4
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
-    
+    command: >
+      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -106,7 +93,7 @@ services:
     container_name: tms-japfa-web
     environment:
       VITE_API_URL: "http://localhost:8000"
-      NODE_ENV: "production" # 🌟 Sekalian dibikin production mode
+      NODE_ENV: "production"
     ports:
       - "5173:5173"
     depends_on:
@@ -116,7 +103,38 @@ services:
     restart: unless-stopped
 
   # ==========================================
-  # NGINX - Reverse Proxy
+  # BACKUP - pg_dump otomatis tiap hari jam 02:00
+  # [MR-14] Backup strategy: cron harian, retensi 7 hari
+  # ==========================================
+  backup:
+    image: postgres:16-alpine
+    container_name: tms-japfa-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: tms_japfa
+      POSTGRES_USER: japfa_user
+      PGPASSWORD: ${POSTGRES_PASSWORD:-japfa_password_change_me}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    # crond di alpine: jalankan backup.sh tiap hari jam 02:00 WIB (19:00 UTC)
+    command: >
+      sh -c "
+        chmod +x /backup.sh &&
+        echo '0 19 * * * /backup.sh >> /backups/backup.log 2>&1' | crontab - &&
+        crond -f -l 8
+      "
+    networks:
+      - tms-network
+    restart: unless-stopped
+    profiles: ["production", "backup"]
+
+  # ==========================================
+  # NGINX - Reverse Proxy (production profile)
   # ==========================================
   nginx:
     image: nginx:alpine

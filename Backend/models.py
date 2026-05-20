@@ -23,6 +23,7 @@ class DOStatus(enum.Enum):
     delivered_partial = "DELIVERED_PARTIAL"
     billed = "BILLED"
     cancelled = "CANCELLED"
+    # 🌟 FIX CTO (QW-4): Nama resminya 'failed', bukan 'delivery_failed'
     failed = "FAILED"
 
 # ==========================================
