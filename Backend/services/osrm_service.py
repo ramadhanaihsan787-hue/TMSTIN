@@ -5,7 +5,8 @@ from services.eta_service import calculate_haversine
 
 logger = logging.getLogger(__name__)
 
-OSRM_BASE_URL = "http://210.79.191.145:5000"
+from core.config import env_settings
+OSRM_BASE_URL = env_settings.OSRM_BASE_URL
 
 # 🌟 FIX CTO: Rata-rata lalu lintas harian (Neutral Matrix)
 AVERAGE_TRAFFIC_FACTOR = 1.20 

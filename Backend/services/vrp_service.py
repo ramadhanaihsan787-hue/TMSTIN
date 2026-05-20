@@ -10,13 +10,11 @@ class VRPService:
         """
         Ngeracik data dari Database (SQLAlchemy Objects) biar siap dimakan OR-Tools
         """
-        # Node 0 selalu Depot (Cikupa)
         coordinates = [(settings.depo_lat, settings.depo_lon)]
         demands = [0]
         is_mall_list = [False]
-        # Depot time window dari settings (misal 06:00 - 20:00)
-        start_min = 360 # 06:00
-        end_min = 1200  # 20:00
+        start_min = time_str_to_minutes(settings.vrp_start_time)
+        end_min   = time_str_to_minutes(settings.vrp_end_time) 
         time_windows = [(start_min, end_min)]
         
         order_mapping = {} # Biar kita tau node 1 itu DO nomor berapa
@@ -43,7 +41,10 @@ class VRPService:
         return {
             "coordinates": coordinates,
             "demands": demands,
-            "capacities": [int(v.capacity_kg * 0.9) for v in vehicles], # Buffer 10%
+            "capacities": [
+                int(v.capacity_kg * (getattr(settings, "vrp_capacity_buffer_percent", 90) / 100.0))
+                for v in vehicles
+            ]
             "num_vehicles": len(vehicles),
             "time_windows": time_windows,
             "is_mall_list": is_mall_list,

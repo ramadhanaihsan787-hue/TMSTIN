@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     EPOD_DIR: str = "uploads/epod"
     GEOMETRY_DIR: str = "route_geometries"
 
+    OSRM_BASE_URL: str = "http://210.79.191.145:5000"
+
     # ==========================================
     # RUNTIME DEFAULTS — seed awal untuk DB.
     # Nilai ini HANYA dipakai saat baris system_settings

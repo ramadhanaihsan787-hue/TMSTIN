@@ -14,12 +14,11 @@ export default defineConfig({
     },
   },
   server: {
-    // 🌟 TAMBAHIN LINK NGROK DI SINI BOS!
-    allowedHosts: [
-      '.loca.lt', 
-      '.ngrok-free.dev', // <--- Jimat biar semua link ngrok diizinkan!
-      'unrefined-platypus-tableful.ngrok-free.dev' 
-    ]
+    // Untuk dev tunnel (ngrok/localtunnel), tambahkan host di .env atau
+    // jalankan: vite --host 0.0.0.0
+    // Jangan hardcode URL tunnel di sini — berubah tiap sesi.
+    host: true,  // izinkan akses dari network lokal (Docker, LAN)
+    port: 5173,
   },
 
   test: {
