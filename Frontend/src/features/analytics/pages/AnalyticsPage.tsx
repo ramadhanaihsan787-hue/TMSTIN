@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAnalytics } from '../hooks';
 import { useDateRange } from '../../../context/DateRangeContext';
 import { toast } from 'sonner';
+import { downloadFile } from '../../../shared/services/apiClient'; // [Item 4]
 
 import {
     KPICards,
@@ -17,7 +18,6 @@ export default function AnalyticsPage() {
     const {
         setStartDate,
         setEndDate,
-        // handleExport, <-- KITA MATIIN FUNGSI PALSU INI
         kpiData,
         summaryLoading,
         fleetData,
@@ -26,40 +26,26 @@ export default function AnalyticsPage() {
         maxVolume,
         volumeLoading,
         getBarHeight,
-        driverData,
-        driversLoading
     } = useAnalytics();
+    // Catatan: driversLoading dan driverData dihapus dari destructuring karena
+    // DriverPerformanceTable sudah self-fetching (manage state sendiri via useEffect di dalamnya).
+    // Passing props loading/drivers ke component tersebut menyebabkan ts(2322).
 
     useEffect(() => {
         setStartDate(globalStart);
         setEndDate(globalEnd);
     }, [globalStart, globalEnd, setStartDate, setEndDate]);
 
-    // 🌟 SUNTIKAN CTO: FUNGSI EXPORT EXCEL NYATA (FR-6.5)
+    // [Item 4] Ganti raw fetch → downloadFile() dari apiClient
+    // Token ditambahkan otomatis oleh axios interceptor di apiClient.ts
+    // baseURL dari VITE_API_URL, bukan hardcoded localhost
     const handleRealExport = async () => {
         toast.loading("Mempersiapkan file Excel...", { id: "export-toast" });
-
         try {
-            const token = localStorage.getItem('token');
-            // Pastiin URL ini nembak ke endpoint yang tadi kita bikin di analytics.py
-            const response = await fetch(`http://localhost:8000/api/analytics/export?format=xlsx&startDate=${globalStart}&endDate=${globalEnd}`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error("Gagal download file");
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `JAPFA_Logistics_Report_${globalStart}_to_${globalEnd}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            
-            a.remove();
-            window.URL.revokeObjectURL(url);
-
+            await downloadFile(
+                `/api/analytics/export?format=xlsx&startDate=${globalStart}&endDate=${globalEnd}`,
+                `JAPFA_Logistics_Report_${globalStart}_to_${globalEnd}.xlsx`
+            );
             toast.success("Excel Report berhasil diunduh!", { id: "export-toast" });
         } catch (error) {
             console.error(error);
@@ -88,7 +74,8 @@ export default function AnalyticsPage() {
                     <DeliveryVolumeChart loading={volumeLoading} data={volumeData} maxVolume={maxVolume} getBarHeight={getBarHeight} />
                     <FleetUtilizationChart loading={utilizationLoading} data={fleetData} />
                 </div>
-                <DriverPerformanceTable loading={driversLoading} drivers={driverData} />
+                {/* DriverPerformanceTable tidak menerima props — self-fetching */}
+                <DriverPerformanceTable />
             </div>
         </div>
     );

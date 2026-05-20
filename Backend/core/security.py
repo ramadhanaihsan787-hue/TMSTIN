@@ -53,6 +53,38 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
+# [QW-1] Fungsi khusus untuk membuat REFRESH token.
+# Sengaja dipisah dari create_access_token() karena pakai kunci yang berbeda.
+# Jangan gabung ke satu fungsi — beda kunci = beda fungsi.
+def create_refresh_token(data: dict) -> str:
+    """
+    Buat JWT refresh token dengan REFRESH_SECRET_KEY (bukan SECRET_KEY).
+    Umur: REFRESH_TOKEN_EXPIRE_DAYS hari (default 7 hari).
+    """
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=env_settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire})
+    return jwt.encode(
+        to_encode,
+        env_settings.REFRESH_SECRET_KEY,   # ← kunci berbeda!
+        algorithm=env_settings.ALGORITHM,
+    )
+
+
+def decode_refresh_token(token: str) -> dict:
+    """
+    Decode dan verifikasi JWT refresh token dengan REFRESH_SECRET_KEY.
+    Pisah dari decode_token() agar access token tidak bisa dipakai
+    sebagai refresh token meskipun belum expired.
+    """
+    payload = jwt.decode(
+        token,
+        env_settings.REFRESH_SECRET_KEY,   # ← kunci berbeda!
+        algorithms=[env_settings.ALGORITHM],
+    )
+    return payload
+
+
 def decode_token(token: str) -> dict:
     """
     Decode JWT token with strict expiry enforcement

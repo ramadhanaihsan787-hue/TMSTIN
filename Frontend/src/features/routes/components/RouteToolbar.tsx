@@ -1,6 +1,7 @@
 // src/features/routes/components/RouteToolbar.tsx
 import React, { useRef, useState } from "react";
 import { toast } from 'sonner';
+import { downloadFile } from '../../../shared/services/apiClient'; // [Item 4]
 
 interface RouteToolbarProps {
     selectedDate: string;
@@ -18,32 +19,17 @@ export default function RouteToolbar({ selectedDate, onDateChange, isUploading, 
         fileInputRef.current?.click();
     };
 
-    // 🌟 FUNGSI PENEMBAK TRIGER DOWNLOAD EXCEL ASLI CORPORATE
+    // [Item 4] Ganti raw fetch → downloadFile() dari apiClient
+    // Token ditambahkan otomatis oleh axios interceptor di apiClient.ts
+    // baseURL dari VITE_API_URL, bukan hardcoded localhost
     const handleDownloadExcelManifest = async () => {
         setIsExporting(true);
-        toast.loading("Sedang menyuntikkan data rute ke Template JAPFA Excel...", { id: "export-sj" });
-        
+        toast.loading("Sedang menyiapkan Surat Jalan JAPFA...", { id: "export-sj" });
         try {
-            const token = localStorage.getItem('token');
-            // Nembak ke API FastAPI yang barusan kita buat
-            const response = await fetch(`http://localhost:8000/api/routes/export-excel?date=${selectedDate}`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error("Gagal mengunduh file manifest");
-
-            // Trik javascript biar browser otomatis nge-download filenya
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Surat_Jalan_JAPFA_${selectedDate}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            await downloadFile(
+                `/api/routes/export-excel?date=${selectedDate}`,
+                `Surat_Jalan_JAPFA_${selectedDate}.xlsx`
+            );
             toast.success("Excel Surat Jalan Berhasil Diunduh!", { id: "export-sj" });
         } catch (error) {
             console.error(error);

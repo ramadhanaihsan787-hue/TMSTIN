@@ -1,7 +1,7 @@
 # Backend/services/auth_service.py
 from sqlalchemy.orm import Session
 from datetime import timedelta 
-from core.security import verify_password, get_password_hash, create_access_token
+from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 import models
 
 class AuthService:
@@ -58,16 +58,15 @@ class AuthService:
     # =======================================================
     @staticmethod
     def create_refresh_token_for_user(user: models.User) -> str:
-        # 🌟 REFRESH TOKEN UMUR PANJANG (7 HARI BIAR SUPIR GA BOLAK BALIK LOGIN)
-        token_lifespan = timedelta(days=7)
-        return create_access_token(
+        # [QW-1] Pakai create_refresh_token() — kunci BERBEDA dari access token
+        # Umur dan signing pakai REFRESH_SECRET_KEY (diatur di core/security.py)
+        return create_refresh_token(
             data={
                 "sub": user.username,
                 "role": user.role.value,
                 "user_id": user.id,
-                "type": "refresh" # Flag pembeda bahwa ini cuma buat refresh
-            },
-            expires_delta=token_lifespan 
+                "type": "refresh",
+            }
         )
     
     @staticmethod

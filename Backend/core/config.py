@@ -35,8 +35,12 @@ class Settings(BaseSettings):
     # ==========================================
     DATABASE_URL: str
     SECRET_KEY: str
+    # [QW-1] Kunci berbeda untuk refresh token — WAJIB diisi di .env
+    # Berbeda dari SECRET_KEY agar token jenis berbeda tidak bisa saling dipakai
+    REFRESH_SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # umur refresh token dalam hari
 
     APP_NAME: str = "TMS JAPFA - AI Engine"
     APP_VERSION: str = "2.0.0"

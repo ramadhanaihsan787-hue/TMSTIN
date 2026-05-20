@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
 
-from jose import jwt, JWTError
+from jose import JWTError
+from core.security import decode_refresh_token  # [QW-1] verifikasi dengan REFRESH_SECRET_KEY
 
 import models
 import schemas 
@@ -63,14 +64,17 @@ def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(data.refresh_token, env_settings.SECRET_KEY, algorithms=[env_settings.ALGORITHM])
+        # [QW-1] decode_refresh_token() pakai REFRESH_SECRET_KEY, bukan SECRET_KEY
+        # Access token yang belum expired tidak bisa dipakai di sini
+        # karena signed dengan kunci yang berbeda.
+        payload = decode_refresh_token(data.refresh_token)
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
-        
-        # Validasi beneran token refresh ngga?
+
+        # Double-check: pastikan ini memang refresh token, bukan access token
         if username is None or token_type != "refresh":
             raise credentials_exception
-            
+
     except JWTError:
         raise credentials_exception
 

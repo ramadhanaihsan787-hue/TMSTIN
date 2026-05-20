@@ -55,7 +55,7 @@ def get_real_driver_performance(db: Session, start_date_str: str, end_date_str: 
                 epod = db.query(models.TMSEpodHistory).filter(models.TMSEpodHistory.line_id == line.line_id).first()
                 if epod:
                     # Kalau udah nyampe (Sukses/Parsial/Retur)
-                    if epod.status in [models.DOStatus.delivered_success, models.DOStatus.delivered_partial, models.DOStatus.delivery_failed]:
+                    if epod.status in [models.DOStatus.delivered_success, models.DOStatus.delivered_partial, models.DOStatus.failed]:
                         do_completed_today += 1
                         
                         # Set Update Terakhir (Karena order by sequence, ini akan nimpa jadi yang paling akhir)
