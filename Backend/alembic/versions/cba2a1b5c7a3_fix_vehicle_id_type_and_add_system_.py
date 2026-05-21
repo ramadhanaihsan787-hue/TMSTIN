@@ -11,7 +11,7 @@ from sqlalchemy.engine.reflection import Inspector # 🌟 SUNTIKAN CTO: Pake Ins
 
 # revision identifiers, used by Alembic.
 revision = 'cba2a1b5c7a3'
-down_revision = None  # 🌟 Kalau ini migrasi pertama, biarkan None. Kalau ada migrasi sebelumnya, isi dengan revision ID sebelumnya
+down_revision = '0000000000000'  # [Fix Deploy] Sekarang ada migration base sebelumnya
 branch_labels = None
 depends_on = None
 
