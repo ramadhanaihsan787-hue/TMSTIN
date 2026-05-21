@@ -8,7 +8,7 @@ interface UserData {
   role: Role;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   role: Role;
   user: UserData | null;
   token: string | null;

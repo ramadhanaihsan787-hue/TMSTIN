@@ -1,3 +1,21 @@
+// [Fix Build] DeliveryOrder — dibutuhkan oleh usePod.ts
+export interface DeliveryOrder {
+  order_id: string;
+  customer_name: string;
+  status: string;
+  weight_total?: number;
+  latitude?: number;
+  longitude?: number;
+  delivery_window_start?: number;
+  delivery_window_end?: number;
+  items?: any[];
+}
+
+export interface OrdersResponse {
+  status: string;
+  total: number;
+  data: DeliveryOrder[];
+}
 import { api } from '../../../shared/services/apiClient';
 
 // ==========================================
@@ -52,6 +70,15 @@ export interface PodActionResponse {
 // API SERVICE
 // ==========================================
 export const podService = {
+  // [Fix Build] getOrders — dibutuhkan oleh usePod.ts
+  getOrders: async (statusFilter?: string): Promise<OrdersResponse> => {
+    const params = statusFilter ? `?status=${statusFilter}` : '';
+    const response = await import('../../../shared/services/apiClient').then(m => 
+      m.api.get(`/api/orders${params}`)
+    );
+    return response.data;
+  },
+
     // 🌟 1. Ambil antrian verifikasi e-POD yang masuk dari supir
     getPodVerifications: async (): Promise<PodVerificationsResponse> => {
         const response = await api.get<PodVerificationsResponse>('/api/pod/verifications');
