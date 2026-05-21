@@ -10,3 +10,4 @@ export * from './api';
 
 // ============= AUTH CONTEXT TYPE =============
 export type { AuthContextType } from '../../context/AuthContext';
+export type { SidebarContextType } from '../../context/SidebarContext';

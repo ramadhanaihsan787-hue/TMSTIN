@@ -1,17 +1,9 @@
 import { useContext } from "react";
-import { SidebarContext } from "../context/SidebarContext";
+import { SidebarContext } from "../../context/SidebarContext";
 import type { SidebarContextType } from "../types";
 
 /**
- * useSidebar Hook
- * Custom hook for accessing sidebar context
- * Simplifies sidebar state management across components
- *
- * @returns {SidebarContextType} Sidebar context with state and control methods
- * @throws {Error} If used outside SidebarProvider
- *
- * @example
- * const { isOpen, isMobile, toggle, close, open } = useSidebar();
+ * useSidebar Hook — akses sidebar context
  */
 export const useSidebar = (): SidebarContextType => {
   const context = useContext(SidebarContext);
@@ -26,42 +18,30 @@ export const useSidebar = (): SidebarContextType => {
   return context;
 };
 
-/**
- * Convenience hook to check if sidebar is open
- */
+// Convenience hooks — disesuaikan dengan field SidebarContextType asli
+// (isCollapsed, toggleSidebar, isMobileMenuOpen, toggleMobileMenu, closeMobileMenu)
+
 export const useSidebarIsOpen = (): boolean => {
-  const { isOpen } = useSidebar();
-  return isOpen;
+  const { isCollapsed } = useSidebar();
+  return !isCollapsed; // isCollapsed = true artinya sidebar TERTUTUP
 };
 
-/**
- * Convenience hook to check if device is mobile
- */
 export const useSidebarIsMobile = (): boolean => {
-  const { isMobile } = useSidebar();
-  return isMobile;
+  const { isMobileMenuOpen } = useSidebar();
+  return isMobileMenuOpen;
 };
 
-/**
- * Convenience hook to get sidebar toggle function
- */
 export const useSidebarToggle = () => {
-  const { toggle } = useSidebar();
-  return toggle;
+  const { toggleSidebar } = useSidebar();
+  return toggleSidebar;
 };
 
-/**
- * Convenience hook to get sidebar close function
- */
 export const useSidebarClose = () => {
-  const { close } = useSidebar();
-  return close;
+  const { closeMobileMenu } = useSidebar();
+  return closeMobileMenu;
 };
 
-/**
- * Convenience hook to get sidebar open function
- */
 export const useSidebarOpen = () => {
-  const { open } = useSidebar();
-  return open;
+  const { toggleMobileMenu } = useSidebar();
+  return toggleMobileMenu;
 };

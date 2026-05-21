@@ -22,18 +22,18 @@ export const useDriverPerformance = () => {
             
             if (Array.isArray(actualData)) {
                 const mappedDrivers: DriverData[] = actualData.map((d: any) => ({
-                    id: d.id, 
-                    name: d.name,
-                    avatar: d.avatar,
-                    status: d.status,
-                    score: d.score,
-                    ontime: d.ontime,
-                    doSuccess: d.doSuccess,
-                    truck: d.truck,
-                    distanceToday: d.distanceToday,
-                    doCompleted: d.doCompleted,
-                    doTotal: d.doTotal,
-                    lastLocation: d.lastLocation,
+                    id: d.id ?? '', 
+                    name: d.name ?? '',
+                    avatar: d.avatar ?? '',
+                    status: d.status ?? 'Offline',
+                    score: typeof d.score === 'number' ? d.score : 0,
+                    ontime: d.ontime != null ? String(d.ontime) : '0%',
+                    doSuccess: d.doSuccess != null ? String(d.doSuccess) : '0/0',
+                    truck: d.truck ?? '-',
+                    distanceToday: typeof d.distanceToday === 'number' ? d.distanceToday : 0,
+                    doCompleted: typeof d.doCompleted === 'number' ? d.doCompleted : 0,
+                    doTotal: typeof d.doTotal === 'number' ? d.doTotal : 0,
+                    lastLocation: d.lastLocation ?? '-',
                     lastUpdate: d.lastUpdate
                 }));
                 

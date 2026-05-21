@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
-interface SidebarContextType {
+export interface SidebarContextType {
     isCollapsed: boolean;
     toggleSidebar: () => void;
     setIsCollapsed: (value: boolean) => void;

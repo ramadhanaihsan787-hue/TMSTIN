@@ -1,17 +1,10 @@
 import { useContext } from "react";
-import { AuthContext } from "../context/AuthContext";
+import { AuthContext } from "../../context/AuthContext";
 import type { AuthContextType } from "../types";
 
 /**
- * useAuth Hook
- * Custom hook for accessing authentication context
- * Simplifies auth logic usage across components
- *
- * @returns {AuthContextType} Authentication context with user, token, and auth methods
- * @throws {Error} If used outside AuthProvider
- *
- * @example
- * const { user, token, login, logout, isAuthenticated } = useAuth();
+ * useAuth Hook — akses authentication context
+ * AuthContextType asli: { role, user, token, login, logout }
  */
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
@@ -26,64 +19,42 @@ export const useAuth = (): AuthContextType => {
   return context;
 };
 
-/**
- * Convenience hook to check if user is authenticated
- */
 export const useIsAuthenticated = (): boolean => {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated;
+  const { token } = useAuth();
+  return token !== null; // isAuthenticated = ada token
 };
 
-/**
- * Convenience hook to get current user
- */
 export const useUser = () => {
   const { user } = useAuth();
   return user;
 };
 
-/**
- * Convenience hook to get current user role
- */
 export const useUserRole = () => {
-  const { user } = useAuth();
-  return user?.role;
+  const { role } = useAuth();
+  return role;
 };
 
-/**
- * Convenience hook to check if user has a specific role
- */
 export const useHasRole = (requiredRole: string | string[]) => {
-  const { user } = useAuth();
-  if (!user) return false;
+  const { role } = useAuth();
+  if (!role) return false;
 
   if (Array.isArray(requiredRole)) {
-    return requiredRole.includes(user.role);
+    return requiredRole.includes(role);
   }
 
-  return user.role === requiredRole;
+  return role === requiredRole;
 };
 
-/**
- * Convenience hook to get auth token
- */
 export const useToken = () => {
   const { token } = useAuth();
-  return token;
+  return token ?? ''; // token bisa null, return string kosong kalau null
 };
 
-/**
- * Convenience hook to check loading state
- */
-export const useAuthLoading = () => {
-  const { loading } = useAuth();
-  return loading;
+// loading dan error tidak ada di AuthContextType asli — return default value
+export const useAuthLoading = (): boolean => {
+  return false; // AuthContext tidak punya loading state
 };
 
-/**
- * Convenience hook to check error state
- */
-export const useAuthError = () => {
-  const { error } = useAuth();
-  return error;
+export const useAuthError = (): string | null => {
+  return null; // AuthContext tidak punya error state
 };

@@ -1,4 +1,4 @@
-import type { DriverData } from '../types';
+import type { DriverData } from '../types/types';
 import DriverTableRow from './DriverTableRow';
 
 interface DriverTableProps {
