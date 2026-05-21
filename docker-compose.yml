@@ -72,7 +72,7 @@ services:
       - ./Backend/uploads:/app/uploads
       - ./Backend/route_geometries:/app/route_geometries
     command: >
-      sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+      sh -c "python wait_for_db.py && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
       interval: 30s
