@@ -80,15 +80,21 @@ def get_routes(
             )
             nama_toko = order.customer.store_name if order.customer else "Toko"
 
+            berat = float(order.weight_total) if order.weight_total else 0.0
             detail_rute.append({
                 "urutan": line.sequence,
                 "nama_toko": nama_toko,
                 "latitude": float(order.latitude) if order.latitude else 0.0,
                 "longitude": float(order.longitude) if order.longitude else 0.0,
-                "berat_kg": order.weight_total,
+                "lat": float(order.latitude) if order.latitude else 0.0,
+                "lon": float(order.longitude) if order.longitude else 0.0,
+                "berat_kg": berat,
+                "turun_barang_kg": berat,   # alias — dibutuhkan schema & frontend
                 "jam_tiba": str(line.est_arrival),
-                "distance_from_prev_km": line.distance_from_prev_km or 0.0,
+                "distance_from_prev_km": float(line.distance_from_prev_km or 0.0),
                 "items": items,
+                "nomor_do": order.order_id,
+                "order_id": order.order_id,
             })
 
         garis_aspal = []

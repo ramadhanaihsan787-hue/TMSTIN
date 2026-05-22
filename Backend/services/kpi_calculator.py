@@ -43,6 +43,42 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
     ).all()
     total_cost = sum([float(e.total) for e in expenses])
 
+    epods_in_range = db.query(models.TMSEpodHistory).filter(
+        func.date(models.TMSEpodHistory.timestamp) >= start_date,
+        func.date(models.TMSEpodHistory.timestamp) <= end_date
+    ).all()
+
+    total_epods = len(epods_in_range)
+    total_success_epods = 0
+    total_qty_delivered = 0.0
+    total_qty_return = 0.0
+    total_qty_damaged = 0.0
+
+    for epod in epods_in_range:
+        # 1. Hitung e-POD yang sukses / partial sukses
+        if epod.status in [models.DOStatus.delivered_success, models.DOStatus.delivered_partial]:
+            total_success_epods += 1
+        
+        # 2. Total kuantitas barang
+        total_qty_delivered += float(epod.qty_delivered) if epod.qty_delivered else 0.0
+        total_qty_return += float(epod.qty_return) if epod.qty_return else 0.0
+        total_qty_damaged += float(epod.qty_damaged) if epod.qty_damaged else 0.0
+
+    # 🌟 RUMUS MATEMATIS 4 KPI
+    # 1. Success Rate
+    success_rate = round((total_success_epods / total_epods * 100), 1) if total_epods > 0 else 0.0
+    
+    # 2. Fill Rate = Dikirim / (Dikirim + Dikembalikan + Rusak)
+    total_qty_attempted = total_qty_delivered + total_qty_return + total_qty_damaged
+    fill_rate = round((total_qty_delivered / total_qty_attempted * 100), 1) if total_qty_attempted > 0 else 0.0
+    
+    # 3. Return Rate = Dikembalikan / Total Attempt
+    return_rate = round((total_qty_return / total_qty_attempted * 100), 1) if total_qty_attempted > 0 else 0.0
+    
+    # 4. Damage Rate = Rusak / Total Attempt
+    damage_rate = round((total_qty_damaged / total_qty_attempted * 100), 1) if total_qty_attempted > 0 else 0.0
+
+
     today = datetime.now().date()
     today_orders = db.query(models.TMSRouteLine).join(
         models.TMSRoutePlan, models.TMSRouteLine.route_id == models.TMSRoutePlan.route_id
@@ -70,11 +106,16 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
 
     return {
         "status": "success",
-        "success_rate_percent": 0.0, # Placeholder otif
+        "success_rate_percent": success_rate, 
         "load_factor_percent": load_utilization,
         "total_weight_kg": round(total_berat, 1),
         "active_fleet_count": total_trucks_used,
-        "data": { "transportCost": round(total_cost, 2), "fillRate": 0.0, "returnRate": 0.0, "damageRate": 0.0 },
+        "data": { 
+            "transportCost": round(total_cost, 2), 
+            "fillRate": fill_rate, 
+            "returnRate": return_rate, 
+            "damageRate": damage_rate 
+        },
         "today_target": round(today_target_kg, 1),
         "today_remaining": round(today_remaining_kg, 1),
         "completed_qty": round(completed_qty_kg, 1),

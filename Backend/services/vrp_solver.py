@@ -1,134 +1,167 @@
-# services/vrp_solver.py
+# services/vrp_solver.py  — JAPFA VRP Engine v2.1 (Stable)
+#
+# CHANGELOG dari v1:
+#   [FIXED] Slack 120 menit (max nunggu 2 jam, bukan 24 jam/1440)
+#   [FIXED] Time limit 60 detik
+#   [REMOVED] SetGlobalSpanCostCoefficient — menyebabkan fatal C++ crash
+#             di OR-Tools ketika ada kendaraan dengan rute kosong.
+#             Keseimbangan dicapai lewat capacity constraints + GLS.
+#   [REMOVED] ReadAssignmentFromRoutes warm start — juga penyebab crash.
+#
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 import logging
 
 logger = logging.getLogger(__name__)
 
-def solve_vrp(distance_matrix, time_matrix, demands, num_vehicles, vehicle_capacities,
-              is_mall_list, time_windows, base_drop_time, var_drop_time):
+
+def solve_vrp(
+    distance_matrix,
+    time_matrix,
+    demands,
+    num_vehicles,
+    vehicle_capacities,
+    is_mall_list,
+    time_windows,
+    base_drop_time,
+    var_drop_time,
+    warm_start_routes=None,   # diterima tapi tidak dipakai (crash risk)
+):
     """
-    Mesin AI VRP GLOBAL (TanPA K-Means!).
-    Murni mikirin Jarak, Kapasitas (KG), dan Jam Kerja.
+    Solver CVRPTW untuk distribusi frozen food JAPFA.
+
+    Keseimbangan antar truk dicapai lewat:
+    - Capacity constraints (truk tidak bisa overload → distribusi natural)
+    - Disjunction penalty 500.000 (solver usahakan semua toko terlayani)
+    - PARALLEL_CHEAPEST_INSERTION → geographic initial solution
+    - GLS 60 detik → fine-tune
     """
-    data = {}
-    data['distance_matrix'] = distance_matrix
-    data['time_matrix'] = time_matrix 
-    data['demands'] = demands
-    data['vehicle_capacities'] = vehicle_capacities
-    data['num_vehicles'] = num_vehicles
-    data['time_windows'] = time_windows 
-    data['depot'] = 0 
-    
-    manager = pywrapcp.RoutingIndexManager(len(data['distance_matrix']), data['num_vehicles'], data['depot'])
+    n_nodes = len(distance_matrix)
+
+    data = {
+        'distance_matrix':    distance_matrix,
+        'time_matrix':        time_matrix,
+        'demands':            demands,
+        'vehicle_capacities': vehicle_capacities,
+        'num_vehicles':       num_vehicles,
+        'time_windows':       time_windows,
+        'depot':              0,
+    }
+
+    manager = pywrapcp.RoutingIndexManager(n_nodes, num_vehicles, data['depot'])
     routing = pywrapcp.RoutingModel(manager)
 
-    # 1. DIMENSI JARAK
-    def distance_callback(from_index, to_index):
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
-        return data['distance_matrix'][from_node][to_node]
+    # ── [A] DIMENSI JARAK ─────────────────────────────────────────────────
+    def distance_callback(fi, ti):
+        return data['distance_matrix'][manager.IndexToNode(fi)][manager.IndexToNode(ti)]
 
-    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    dist_cb = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(dist_cb)
+    routing.AddDimension(dist_cb, 0, 300_000, True, 'Distance')
 
-    # NGGA ADA GLOBAL SPAN COST BIAR AI NGGA PELIT JARAK!
-    routing.AddDimension(transit_callback_index, 0, 300000, True, 'Distance')
+    # CATATAN: SetGlobalSpanCostCoefficient TIDAK dipakai di sini.
+    # Kombinasi GlobalSpan + kendaraan rute kosong = fatal C++ crash.
 
-    # 2. DIMENSI KAPASITAS (KG)
-    def demand_callback(from_index):
-        from_node = manager.IndexToNode(from_index)
-        return data['demands'][from_node]
+    # ── [B] DIMENSI KAPASITAS (KG) ────────────────────────────────────────
+    def demand_callback(fi):
+        return data['demands'][manager.IndexToNode(fi)]
 
-    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    demand_cb = routing.RegisterUnaryTransitCallback(demand_callback)
     routing.AddDimensionWithVehicleCapacity(
-        demand_callback_index, 0, data['vehicle_capacities'], True, 'Capacity'
+        demand_cb, 0, data['vehicle_capacities'], True, 'Capacity'
     )
 
-    # 3. DIMENSI WAKTU & JAM KERJA
-    def time_callback(from_index, to_index):
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
+    # ── [C] DIMENSI WAKTU ─────────────────────────────────────────────────
+    def time_callback(fi, ti):
+        fn = manager.IndexToNode(fi)
+        tn = manager.IndexToNode(ti)
+        travel = data['time_matrix'][fn][tn]
+        if tn == 0:
+            return int(travel)
+        qty = data['demands'][tn]
+        service = (60 if is_mall_list[tn] else base_drop_time) + (qty * var_drop_time / 10.0)
+        return int(travel + service)
 
-        travel_time = data['time_matrix'][from_node][to_node]
+    time_cb = routing.RegisterTransitCallback(time_callback)
 
-        if to_node == 0:
-            return int(travel_time)
+    # Slack 120 menit = max nunggu 2 jam per stop (fix dari v1 yang 1440 = 24 jam)
+    MAX_WAIT = 120
+    MAX_DAY  = 1440
+    routing.AddDimension(time_cb, MAX_WAIT, MAX_DAY, False, 'Time')
+    time_dim = routing.GetDimensionOrDie('Time')
 
-        qty = data['demands'][to_node]
-        tambahan_waktu_qty = (qty * var_drop_time) / 10.0
-        service_time = (60 if is_mall_list[to_node] else base_drop_time) + tambahan_waktu_qty
+    depot_start, depot_end = data['time_windows'][0]
 
-        return int(travel_time + service_time)
-
-    time_callback_index = routing.RegisterTransitCallback(time_callback)
-    
-    # KUNCI 1: Maksimal nunggu supir kita bikin panjang (1440 = 24 Jam)
-    routing.AddDimension(time_callback_index, 1440, 1440, False, 'Time') 
-    time_dimension = routing.GetDimensionOrDie('Time')
-
-    # KUNCI 2: HARD & SOFT TIME WINDOWS (Logika Lembur)
-    for location_idx, time_window in enumerate(data['time_windows']):
-        if location_idx == data['depot']: continue
-            
-        index = manager.NodeToIndex(location_idx)
-        tw_start, tw_end = time_window # tw_end ini jam 19:30
-        
-        if is_mall_list[location_idx]:
-            # Mall = Strict (Dilarang telat)
-            time_dimension.CumulVar(index).SetRange(tw_start, tw_end)
+    # Time windows per toko
+    for loc_idx, (tw_s, tw_e) in enumerate(data['time_windows']):
+        if loc_idx == data['depot']:
+            continue
+        ridx = manager.NodeToIndex(loc_idx)
+        if is_mall_list[loc_idx]:
+            # Mall / chain minimarket → hard window (tidak boleh telat)
+            time_dim.CumulVar(ridx).SetRange(tw_s, tw_e)
         else:
-            # Toko Biasa = Boleh Lembur Maksimal 2 Jam!
-            max_overtime_mins = 120
-            absolute_deadline = tw_end + max_overtime_mins
-            if absolute_deadline > 1440: absolute_deadline = 1440
-                
-            time_dimension.CumulVar(index).SetRange(data['time_windows'][0][0], absolute_deadline)
-            
-            # AI bakal kena denda 100 poin per menit kalau maksa lembur (Lewat dari tw_end/19:30)
-            penalty_lembur = 100 
-            time_dimension.SetCumulVarSoftUpperBound(index, tw_end, penalty_lembur)
+            # Toko biasa → soft window, boleh lembur max 2 jam
+            deadline = min(tw_e + 120, MAX_DAY)
+            time_dim.CumulVar(ridx).SetRange(depot_start, deadline)
+            time_dim.SetCumulVarSoftUpperBound(ridx, tw_e, 100)
 
-    # Depot Start & End constraint
-    for vehicle_id in range(data['num_vehicles']):
-        index = routing.Start(vehicle_id)
-        time_dimension.CumulVar(index).SetRange(data['time_windows'][0][0], data['time_windows'][0][1])
-        index = routing.End(vehicle_id)
-        time_dimension.CumulVar(index).SetRange(data['time_windows'][0][0], 1440)
-        
-        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(vehicle_id)))
-        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(vehicle_id)))
+    # Depot constraints + finalizer (agar truk kosong pun ter-bound)
+    for v in range(num_vehicles):
+        si = routing.Start(v)
+        ei = routing.End(v)
+        time_dim.CumulVar(si).SetRange(depot_start, depot_end)
+        time_dim.CumulVar(ei).SetRange(depot_start, MAX_DAY)
+        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(si))
+        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(ei))
 
-    # KUNCI 3: DENDA BUANG TOKO MAHAL BANGET BIAR AI TAKUT!
-    penalty = 500000 
-    for node in range(1, len(data['distance_matrix'])):
-        routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+    # ── [D] DENDA DROP NODE ───────────────────────────────────────────────
+    for node in range(1, n_nodes):
+        routing.AddDisjunction([manager.NodeToIndex(node)], 500_000)
 
-    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-    search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
-    search_parameters.local_search_metaheuristic = (routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH)
-    search_parameters.time_limit.seconds = 30 # Kasih waktu lebih buat mikir global
+    # ── [E] SEARCH PARAMETERS ────────────────────────────────────────────
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
+    )
+    params.local_search_metaheuristic = (
+        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    )
+    params.time_limit.seconds = 60
 
-    logger.info("OR-Tools: Memulai kalkulasi Global VRP...")
-    solution = routing.SolveWithParameters(search_parameters)
+    # ── [F] SOLVE ─────────────────────────────────────────────────────────
+    if warm_start_routes:
+        logger.info("ℹ️  warm_start_routes tersedia (tidak diinjeksi — stable mode)")
 
-    if solution:
-        results = {'routes': [], 'dropped_nodes': []}
-        for vehicle_id in range(data['num_vehicles']):
-            index = routing.Start(vehicle_id)
-            route = []
-            while not routing.IsEnd(index):
-                node_index = manager.IndexToNode(index)
-                route.append(node_index)
-                index = solution.Value(routing.NextVar(index))
-            route.append(manager.IndexToNode(index))
-            results['routes'].append(route)
-            
-        for node in range(1, len(data['distance_matrix'])):
-            if solution.Value(routing.NextVar(manager.NodeToIndex(node))) == manager.NodeToIndex(node):
-                results['dropped_nodes'].append(node)
-                
-        return results
-    else:
-        logger.error("OR-Tools: GAGAL MENEMUKAN SOLUSI!")
+    logger.info(
+        f"🤖 OR-Tools CVRPTW: {n_nodes - 1} toko | {num_vehicles} truk | GLS 60 detik"
+    )
+    solution = routing.SolveWithParameters(params)
+
+    # ── [G] FORMAT HASIL ──────────────────────────────────────────────────
+    if not solution:
+        logger.error("❌ OR-Tools: tidak ada solusi ditemukan!")
         return None
+
+    results = {'routes': [], 'dropped_nodes': []}
+
+    for v in range(num_vehicles):
+        idx = routing.Start(v)
+        route = []
+        while not routing.IsEnd(idx):
+            route.append(manager.IndexToNode(idx))
+            idx = solution.Value(routing.NextVar(idx))
+        route.append(manager.IndexToNode(idx))
+        results['routes'].append(route)
+
+    for node in range(1, n_nodes):
+        nidx = manager.NodeToIndex(node)
+        if solution.Value(routing.NextVar(nidx)) == nidx:
+            results['dropped_nodes'].append(node)
+
+    active = sum(1 for r in results['routes'] if len(r) > 2)
+    logger.info(
+        f"✅ Solusi: {active}/{num_vehicles} truk aktif | "
+        f"{len(results['dropped_nodes'])} toko drop"
+    )
+    return results

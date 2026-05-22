@@ -50,16 +50,37 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         # 🌟 ANTI-NULL KOORDINAT
         # =========================================================
         # Kita cek satu-satu, ada ngga toko yang GPS-nya masih bodong?
+        # ── Validasi koordinat ketat: NULL, 0.0/0.0, di luar bounding box Indonesia
+        # Bounding box Indonesia: lat [-11, 6], lon [95, 141]
+        def _koordinat_invalid(order) -> bool:
+            lat = order.latitude
+            lon = order.longitude
+            if lat is None or lon is None:
+                return True
+            try:
+                lat_f, lon_f = float(lat), float(lon)
+            except (TypeError, ValueError):
+                return True
+            # Koordinat (0, 0) = tengah laut, jelas salah
+            if lat_f == 0.0 and lon_f == 0.0:
+                return True
+            # Di luar bounding box Indonesia (dengan margin)
+            if not (-12.0 <= lat_f <= 7.0 and 94.0 <= lon_f <= 142.0):
+                return True
+            return False
+
         toko_tanpa_gps = [
-            order.order_id for order in pending_orders 
-            if order.latitude is None or order.longitude is None
+            order.order_id for order in pending_orders
+            if _koordinat_invalid(order)
         ]
 
         if toko_tanpa_gps:
-            # Kalo ada, KITA GAGALIN VRP-NYA DETIK INI JUGA!
-            # Biar admin ngebenerin dulu di UI Preview.
-            daftar_toko = ", ".join(toko_tanpa_gps[:5]) # Kasih tau 5 DO pertama yang bermasalah
-            pesan_error = f"VRP dibatalkan! Ada {len(toko_tanpa_gps)} DO yang tidak memiliki koordinat GPS (contoh: {daftar_toko}). Silakan lengkapi koordinatnya terlebih dahulu."
+            daftar_toko = ", ".join(toko_tanpa_gps[:5])
+            pesan_error = (
+                f"VRP dibatalkan! Ada {len(toko_tanpa_gps)} DO dengan koordinat GPS "
+                f"tidak valid (NULL, 0.0/0.0, atau di luar Indonesia). "
+                f"Contoh: {daftar_toko}. Silakan lengkapi koordinatnya terlebih dahulu."
+            )
             raise Exception(pesan_error)
         # =========================================================
 
@@ -74,9 +95,10 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         vrp_input = vrp_service.VRPService.prepare_vrp_data(pending_orders, vehicles, settings)
 
         locs = [{"lat": lat, "lon": lon} for lat, lon in vrp_input["coordinates"]]
-        dist_mat, time_mat = osrm_service.build_osrm_matrix(locs)
+        departure_hour = vrp_input.get('departure_hour', 7)
+        dist_mat, time_mat = osrm_service.build_osrm_matrix(locs, departure_hour=departure_hour)
         if not dist_mat:
-            dist_mat, time_mat = osrm_service.build_haversine_matrix(locs)
+            dist_mat, time_mat = osrm_service.build_haversine_matrix(locs, departure_hour=departure_hour)
 
         update_job_status(VRP_JOBS, job_id, "processing", 50, "OR-Tools sedang menghitung rute optimal...")
 

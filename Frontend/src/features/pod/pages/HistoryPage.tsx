@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Header from "../../../shared/components/Header";
 import { podService, type PodRecord } from "../services/podService";
+import { toast } from "sonner"; 
 
 // Helper function to format timestamp beautifully
 const formatTimestamp = (tsStr: string) => {
@@ -61,7 +62,7 @@ const ActionMenu = ({
                     </button>
                     <button 
                         onClick={() => {
-                            alert(`Mengunduh PDF untuk ${orderId}...`);
+                            toast.info(`Mengunduh PDF untuk ${orderId}...`);
                             setOpenId(null);
                         }}
                         className="flex items-center gap-3 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#222] hover:text-primary dark:hover:text-primary rounded-lg transition-colors text-left group active:scale-95 font-medium"
@@ -70,7 +71,7 @@ const ActionMenu = ({
                     </button>
                     <button 
                         onClick={() => {
-                            alert(`Mencetak arsip untuk ${orderId}...`);
+                            toast.info(`Mencetak arsip untuk ${orderId}...`);
                             setOpenId(null);
                         }}
                         className="flex items-center gap-3 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#222] hover:text-primary dark:hover:text-primary rounded-lg transition-colors text-left group active:scale-95 font-medium"
@@ -151,7 +152,7 @@ export default function History() {
 
     const handleDownloadReport = (format: string) => {
         setIsDownloadMenuOpen(false);
-        alert(`Laporan format ${format} berhasil diexport dan diunduh untuk ${totalDocs} dokumen!`);
+        toast.success(`Laporan format ${format} berhasil diexport dan diunduh untuk ${totalDocs} dokumen!`);
     };
 
     return (
@@ -475,7 +476,7 @@ export default function History() {
                                                                 <button 
                                                                     onClick={(e) => { 
                                                                         e.stopPropagation(); 
-                                                                        alert(`Downloading PDF report for ${row.order_id}...`); 
+                                                                        toast.info(`Downloading PDF report for ${row.order_id}...`); 
                                                                         setOpenActionId(null); 
                                                                     }} 
                                                                     className="flex items-center gap-3 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#222] hover:text-primary rounded-lg transition-colors text-left group active:scale-95 font-medium"

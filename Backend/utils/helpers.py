@@ -7,6 +7,13 @@ from core.constants import EARTH_RADIUS_METERS, MALL_KEYWORDS
 import json
 from models import SystemAuditLog
 
+# 🌟 FIX: Import logging
+import logging
+
+# 🌟 FIX: Inisialisasi logger
+logger = logging.getLogger(__name__)
+
+
 def calculate_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -88,7 +95,8 @@ def time_str_to_minutes(time_input) -> int:
         return 0
 
     except Exception as e:
-        print(f"⚠️ Gagal parsing waktu: {time_input} | {e}")
+        # 🌟 FIX: Ganti print jadi logger.warning
+        logger.warning(f"⚠️ Gagal parsing waktu: {time_input} | {e}")
         return 0
 
 

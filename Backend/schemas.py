@@ -418,24 +418,44 @@ class RouteDetail(BaseModel):
     latitude: float
     longitude: float
     berat_kg: float
+    turun_barang_kg: Optional[float] = None   # alias berat_kg, diisi oleh GET /routes
     jam_tiba: str
     distance_from_prev_km: float
-    items: List[Dict[str, Any]]
+    items: List[Dict[str, Any]] = []
+    # field tambahan dari preview / resequence
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    timeWindow: Optional[str] = None
+    jam_maks: Optional[str] = None
+    nomor_do: Optional[str] = None
+    order_id: Optional[str] = None
+    keterangan: Optional[str] = None
+
+    model_config = {"extra": "allow"}   # terima field tambahan tanpa error
 
 class RouteData(BaseModel):
     route_id: str
+    id: Optional[str] = None
     tanggal: str
     driver_name: str
     kendaraan: str
+    armada: Optional[str] = None          # alias kendaraan
+    vehicle: Optional[str] = None
     jenis: str
     destinasi_jumlah: int
     total_berat: float
+    total_weight: Optional[float] = None
+    total_muatan_kg: Optional[float] = None
     total_distance_km: float
+    total_jarak_km: Optional[float] = None
     transport_cost: float
     status: str
     zone: str
     detail_rute: List[RouteDetail]
-    garis_aspal: List[List[float]]
+    detail_perjalanan: Optional[List[RouteDetail]] = None   # alias detail_rute
+    garis_aspal: Optional[Any] = None     # bisa list atau dict tergantung source
+
+    model_config = {"extra": "allow"}   # terima field tambahan
 
 class DroppedNode(BaseModel):
     nama_toko: str
