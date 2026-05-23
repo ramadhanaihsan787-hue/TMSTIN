@@ -54,11 +54,10 @@ interface RouteMapProps {
     droppedNodesData?: any[]; 
     trafficWarnings?: TrafficWarning[]; 
     onSelectRoute?: (routeId: string | null) => void;
-    zonesData?: any[]; // 🌟 FIX TS: Tambahin baris ini supaya error zonesData hilang!
+    zonesData?: any[]; 
 }
 
-// ... (Isi ke bawahnya sama persis kayak yang lu kirim tadi, ngga ada yang diubah) ...
-export default function RouteMap({ routesData, selectedRouteId, truckColors = [], droppedNodesData = [], trafficWarnings = [], onSelectRoute }: RouteMapProps) {
+export default function RouteMap({ routesData, selectedRouteId, truckColors = [], droppedNodesData = [], trafficWarnings = [], onSelectRoute, zonesData = [] }: RouteMapProps) {
     const mapRef = useRef<MapRef>(null);
     const [viewState, setViewState] = useState({ longitude: DEPO_LON, latitude: DEPO_LAT, zoom: 10 });
     const [popupInfo, setPopupInfo] = useState<any>(null);
