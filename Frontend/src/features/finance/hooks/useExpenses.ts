@@ -4,12 +4,22 @@ import { toast } from 'sonner';
 import { financeService } from '../services/financeService';
 import type { ExpenseEntry } from '../types';
 
+interface FleetItem {
+    id: number;
+    plate: string;
+    type: string;
+}
+
+interface DriverItem {
+    id: number;
+    name: string;
+}
+
 export const useExpenses = () => {
     const [entries, setEntries] = useState<ExpenseEntry[]>([]);
     
-    // 🌟 STATE BUAT MASTER DATA
-    const [fleets, setFleets] = useState<{plate: string, type: string}[]>([]);
-    const [drivers, setDrivers] = useState<string[]>([]);
+    const [fleets, setFleets] = useState<FleetItem[]>([]);
+    const [drivers, setDrivers] = useState<DriverItem[]>([]);
     
     const [isLoading, setIsLoading] = useState(false);
     const [isMasterLoading, setIsMasterLoading] = useState(false);

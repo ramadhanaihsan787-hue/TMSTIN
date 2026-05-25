@@ -54,10 +54,11 @@ interface RouteMapProps {
     droppedNodesData?: any[]; 
     trafficWarnings?: TrafficWarning[]; 
     onSelectRoute?: (routeId: string | null) => void;
-    zonesData?: any[]; 
+    zonesData?: any[]; // 🌟 FIX TS: Tambahin baris ini supaya error zonesData hilang!
 }
 
-export default function RouteMap({ routesData, selectedRouteId, truckColors = [], droppedNodesData = [], trafficWarnings = [], onSelectRoute, zonesData = [] }: RouteMapProps) {
+// ... (Isi ke bawahnya sama persis kayak yang lu kirim tadi, ngga ada yang diubah) ...
+export default function RouteMap({ routesData, selectedRouteId, truckColors = [], droppedNodesData = [], trafficWarnings = [], onSelectRoute }: RouteMapProps) {
     const mapRef = useRef<MapRef>(null);
     const [viewState, setViewState] = useState({ longitude: DEPO_LON, latitude: DEPO_LAT, zoom: 10 });
     const [popupInfo, setPopupInfo] = useState<any>(null);
@@ -90,11 +91,17 @@ export default function RouteMap({ routesData, selectedRouteId, truckColors = []
             const isBlinking = selectedRouteId === routeId;
 
             let coords: number[][] = [];
-            
-            if (route.garis_aspal && route.garis_aspal.coordinates && route.garis_aspal.coordinates.length > 0) {
-                coords = route.garis_aspal.coordinates.filter((c: any) => !isNaN(c[0]) && !isNaN(c[1])); 
-            } else if (route.polyline && route.polyline.length > 0) {
-                coords = route.polyline.filter((p: any) => !isNaN(p[0]) && !isNaN(p[1])).map((p: any) => [p[1], p[0]]);
+
+            // Priority 1: geometry field dari useRoutes (di-map dari garis_aspal)
+            // Format: [lon, lat][] — Mapbox native, tidak perlu flip
+            if (route.geometry && Array.isArray(route.geometry) && route.geometry.length >= 2) {
+                coords = (route.geometry as number[][]).filter(
+                    (c: number[]) => Array.isArray(c) && !isNaN(c[0]) && !isNaN(c[1])
+                );
+            // Priority 2: garis_aspal langsung sebagai plain array [lon,lat][]
+            } else if (Array.isArray(route.garis_aspal) && route.garis_aspal.length >= 2) {
+                coords = route.garis_aspal.filter((c: any) => Array.isArray(c) && !isNaN(c[0]) && !isNaN(c[1]));
+            // Priority 3: Fallback straight-line antar stop (tidak ada geometry dari backend)
             } else {
                 coords = [[DEPO_LON, DEPO_LAT]];
                 const details = route.details || route.detail_rute || route.detail_perjalanan || [];
@@ -103,6 +110,7 @@ export default function RouteMap({ routesData, selectedRouteId, truckColors = []
                     const lon = parseFloat(stop.longitude || stop.lon);
                     if (!isNaN(lat) && !isNaN(lon)) coords.push([lon, lat]);
                 });
+                coords.push([DEPO_LON, DEPO_LAT]);
             }
 
             if (coords.length < 2) coords = [[DEPO_LON, DEPO_LAT], [DEPO_LON, DEPO_LAT]];

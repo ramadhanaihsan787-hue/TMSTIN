@@ -157,7 +157,12 @@ def build_haversine_matrix(locations: list, departure_hour: int | None = None):
 
 
 def get_road_geometry(route_indices: list, locations: list) -> list:
-    """Ambil polyline jalan asli dari OSRM Route API (untuk visualisasi peta)."""
+    """
+    Ambil polyline jalan asli dari OSRM Route API (untuk visualisasi peta).
+
+    Returns: list of [lon, lat] — format native Mapbox GeoJSON.
+    OSRM sudah mengembalikan [lon, lat], tidak perlu flip.
+    """
     try:
         coords = ";".join(
             [f"{locations[n]['lon']},{locations[n]['lat']}" for n in route_indices]
@@ -167,8 +172,9 @@ def get_road_geometry(route_indices: list, locations: list) -> list:
         if res.status_code == 200:
             data = res.json()
             if data.get("code") == "Ok":
-                coordinates = data["routes"][0]["geometry"]["coordinates"]
-                return [[p[1], p[0]] for p in coordinates]
+                # OSRM geometry.coordinates sudah [lon, lat] — format Mapbox native
+                # Tidak perlu flip. Frontend langsung pakai tanpa transformasi.
+                return data["routes"][0]["geometry"]["coordinates"]
     except Exception as e:
         logger.error(f"⚠️ Gagal ambil geometry OSRM: {e}")
     return []

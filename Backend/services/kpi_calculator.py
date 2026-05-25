@@ -25,9 +25,17 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
     total_do, total_berat, total_capacity_available = 0, 0.0, 0.0
     total_trucks_used = len(rute_aktif)
 
+    # Hitung rata-rata kapasitas fleet sebagai fallback dinamis
+    # (lebih akurat dari hardcode 2000 kg untuk fleet JAPFA yang variatif)
+    from sqlalchemy import func as sqlfunc
+    avg_cap_result = db.query(sqlfunc.avg(models.FleetVehicle.capacity_kg)).filter(
+        models.FleetVehicle.capacity_kg.isnot(None)
+    ).scalar()
+    default_cap_kg = float(avg_cap_result) if avg_cap_result else 2000.0
+
     for rute in rute_aktif:
-        total_capacity_available += float(rute.vehicle.capacity_kg) if rute.vehicle and rute.vehicle.capacity_kg else 2000.0 
-            
+        total_capacity_available += float(rute.vehicle.capacity_kg) if rute.vehicle and rute.vehicle.capacity_kg else default_cap_kg
+
         for line in rute.route_lines:
             if line.sequence > 0 and line.order:
                 total_do += 1
@@ -136,8 +144,15 @@ def get_efficiency_dashboard(db: Session, settings):
     
     total_capacity, total_weight = 0.0, 0.0
 
+    # Fallback capacity dinamis dari rata-rata fleet
+    from sqlalchemy import func as sqlfunc
+    avg_cap_eff = db.query(sqlfunc.avg(models.FleetVehicle.capacity_kg)).filter(
+        models.FleetVehicle.capacity_kg.isnot(None)
+    ).scalar()
+    default_cap_eff = float(avg_cap_eff) if avg_cap_eff else 2000.0
+
     for r in rutes:
-        total_capacity += float(r.vehicle.capacity_kg) if r.vehicle and r.vehicle.capacity_kg else 2000.0
+        total_capacity += float(r.vehicle.capacity_kg) if r.vehicle and r.vehicle.capacity_kg else default_cap_eff
         total_weight += sum([float(line.order.weight_total) for line in r.route_lines if line.order and line.order.weight_total and line.sequence > 0])
 
     lf_percent = round((total_weight / total_capacity) * 100, 1) if total_capacity > 0 else 0.0
@@ -178,7 +193,7 @@ def get_efficiency_dashboard(db: Session, settings):
     op_excellence = []
     for rute in rutes[:5]: 
         w = sum([float(line.order.weight_total) for line in rute.route_lines if line.order and line.order.weight_total and line.sequence > 0])
-        c = float(rute.vehicle.capacity_kg) if rute.vehicle and rute.vehicle.capacity_kg else 2000.0
+        c = float(rute.vehicle.capacity_kg) if rute.vehicle and rute.vehicle.capacity_kg else default_cap_eff
         lf_rute = round((w/c)*100) if c > 0 else 0
         start_time = db.query(func.min(models.TMSRouteLine.est_arrival)).filter(models.TMSRouteLine.route_id == rute.route_id).scalar()
         
@@ -196,7 +211,7 @@ def get_efficiency_dashboard(db: Session, settings):
         w_day, c_day = 0.0, 0.0
         for r in rutes_day:
             w_day += sum([float(line.order.weight_total) for line in r.route_lines if line.order and line.order.weight_total and line.sequence > 0])
-            c_day += float(r.vehicle.capacity_kg) if r.vehicle and r.vehicle.capacity_kg else 2000.0
+            c_day += float(r.vehicle.capacity_kg) if r.vehicle and r.vehicle.capacity_kg else default_cap_eff
         lf_trend.append(round((w_day / c_day) * 100) if c_day > 0 else 0)
 
     return {

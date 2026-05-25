@@ -80,17 +80,20 @@ interface RoutePreviewModalProps {
 // ─────────────────────────────────────────────────────────────────────────────
 /** Konversi garis_aspal dari backend ke [lon, lat][] untuk Mapbox */
 function extractLineCoords(garis_aspal: any, stops: any[]): number[][] {
-    // Kalau backend kirim sebagai plain array [[lat,lon], ...]
+    // Backend (osrm_service.get_road_geometry) sudah mengembalikan [lon, lat][]
+    // Format Mapbox native — TIDAK perlu flip lagi.
+    //
+    // Priority 1: plain array [lon, lat][] dari backend
     if (Array.isArray(garis_aspal) && garis_aspal.length >= 2) {
-        return garis_aspal
-            .filter((c: any) => Array.isArray(c) && !isNaN(c[0]) && !isNaN(c[1]))
-            .map((c: any) => [c[1], c[0]]); // flip lat,lon → lon,lat
+        return garis_aspal.filter(
+            (c: any) => Array.isArray(c) && !isNaN(c[0]) && !isNaN(c[1])
+        );
     }
-    // Kalau backend kirim sebagai GeoJSON object
+    // Priority 2: GeoJSON object {type: 'LineString', coordinates: [...]}
     if (garis_aspal?.coordinates?.length >= 2) {
         return garis_aspal.coordinates.filter((c: any) => !isNaN(c[0]) && !isNaN(c[1]));
     }
-    // Fallback: straight-line antar stop
+    // Fallback: straight-line depot → stops → depot
     const coords: number[][] = [[DEPO_LON, DEPO_LAT]];
     stops.forEach((s: any) => {
         const lon = parseFloat(s.lon || s.longitude);

@@ -168,6 +168,11 @@ class TMSRoutePlan(Base):
     
     route_lines = relationship("TMSRouteLine", back_populates="route_plan")
 
+    # Garis rute jalan asli dari OSRM — disimpan sebagai JSON string [[lon,lat],...]
+    # Diisi saat confirm_routes, dibaca saat GET /api/routes
+    # Menggantikan route_geometries/*.json yang tidak pernah ditulis
+    route_geometry = Column(Text, nullable=True)
+
 class TMSRouteLine(Base):
     __tablename__ = "tms_route_line"
     __table_args__ = {'extend_existing': True}

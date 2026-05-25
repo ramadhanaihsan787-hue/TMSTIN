@@ -38,8 +38,35 @@ export const useAnalytics = () => {
         try {
             const data = await analyticsService.fetchAnalyticsData(startDate, endDate);
             
-            // Masukin data ke masing-masing state
-            setKpiData(data.summary?.data);
+            // ── Transform KPI summary ──────────────────────────────────────────
+            // Backend /api/analytics/kpi-summary mengembalikan structure:
+            // {
+            //   status, success_rate_percent, load_factor_percent,
+            //   total_weight_kg, active_fleet_count,
+            //   data: { transportCost, fillRate, returnRate, damageRate },
+            //   today_*, completed_*, in_transit_*
+            // }
+            //
+            // Sebelumnya: setKpiData(data.summary?.data) — hanya ambil nested
+            // .data sehingga totalShipments, loadFactor, dll selalu undefined.
+            // Sekarang: flatten semua field yang dibutuhkan KPICards.
+            const s = data.summary;
+            const fmt = (n: number | undefined) => `${(n ?? 0).toFixed(1)}%`;
+            setKpiData({
+                // Field baru — data aktual dari backend
+                successRate:      fmt(s?.success_rate_percent),
+                loadFactor:       fmt(s?.load_factor_percent),
+                fillRate:         fmt(s?.data?.fillRate),
+                returnRate:       fmt(s?.data?.returnRate),
+                damageRate:       fmt(s?.data?.damageRate),
+                totalWeightKg:    s?.total_weight_kg   ?? 0,
+                activeFleetCount: s?.active_fleet_count ?? 0,
+                transportCost:    s?.data?.transportCost ?? 0,
+                totalShipments:   s?.active_fleet_count ?? 0,
+                // Field lama — backward compat untuk komponen yang masih pakai
+                otifRate:         fmt(s?.success_rate_percent),
+                avgLoadingTime:   `${(s?.total_weight_kg ?? 0).toFixed(1)} KG`,
+            });
             setFleetData(data.utilization?.data);
             setVolumeData(data.volume?.data || []);
             setMaxVolume(data.volume?.max || 1);

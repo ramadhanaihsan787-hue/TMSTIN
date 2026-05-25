@@ -1,92 +1,156 @@
-import httpx
-import datetime
+# Backend/services/traffic_validator.py
+#
+# Schedule Validator — cek apakah ETA tiap stop melewati jam tutup toko.
+#
+# CHANGELOG:
+#   [FIX] Hapus import httpx dan _minutes_to_iso() yang tidak dipakai
+#   [FIX] Parsing tw_end: baca dari stop.jam_maks → stop.timeWindow → default 20:00
+#   [FIX] Parsing jam_tiba: handle "HH:MM:SS" dan "HH:MM" keduanya
+#   [NEW] Output tambah on_time_count dan total_stops
+#
 import logging
-
-from dependencies import get_settings
 from utils.helpers import time_str_to_minutes
+from dependencies import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Jam tutup operasional default JAPFA kalau toko tidak punya time window eksplisit
+_DEFAULT_CLOSE_HOUR = "20:00"
 
-def _minutes_to_iso(total_minutes: int, date_str: str) -> str:
-    base = datetime.datetime.strptime(date_str, "%Y-%m-%d")
 
-    h, m = divmod(total_minutes, 60)
+def _parse_jam(jam_str: str | None) -> int | None:
+    """
+    Parse jam tiba dari string ke menit.
+    Handle format 'HH:MM:SS', 'HH:MM', dan None.
+    Return None kalau tidak bisa di-parse.
+    """
+    if not jam_str:
+        return None
+    try:
+        # Ambil hanya HH:MM — potong detik kalau ada
+        parts = str(jam_str).strip().split(":")
+        if len(parts) >= 2:
+            h = int(parts[0])
+            m = int(parts[1])
+            return h * 60 + m
+    except (ValueError, AttributeError):
+        pass
+    return None
 
-    dt = base + datetime.timedelta(
-        hours=int(h % 24),
-        minutes=int(m)
-    )
 
-    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+def _get_tw_end(stop: dict) -> int | None:
+    """
+    Ambil jam tutup toko dari stop dict.
+    Priority: jam_maks → timeWindow → default 20:00.
+    """
+    # Coba jam_maks (format "HH:MM" atau "HH:MM:SS")
+    if stop.get("jam_maks"):
+        parsed = _parse_jam(stop["jam_maks"])
+        if parsed is not None:
+            return parsed
+
+    # Coba timeWindow (format "HH:MM" atau "HH:MM:SS")
+    if stop.get("timeWindow"):
+        parsed = _parse_jam(stop["timeWindow"])
+        if parsed is not None:
+            return parsed
+
+    # Fallback ke default jam tutup operasional
+    return _parse_jam(_DEFAULT_CLOSE_HOUR)
 
 
 def validate_route_traffic(route: dict, date_str: str) -> dict:
     """
-    Traffic validation after VRP optimization
+    Validasi jadwal rute — cek apakah ETA tiap stop melewati jam tutup toko.
+
+    Nama fungsi dipertahankan untuk backward compatibility dengan vrp_jobs.py.
+    Logika internal sudah diperbaiki — sebelumnya tw_end sering None sehingga
+    tidak ada warning yang pernah keluar.
+
+    Args:
+        route:    dict satu truk dari jadwal_truk_internal
+        date_str: tanggal hari ini (format YYYY-MM-DD)
+
+    Returns:
+        {
+            warnings:      list of warning dicts,
+            has_critical:  bool,
+            route_id:      str,
+            on_time_count: int,  — jumlah stop yang on-time
+            total_stops:   int,  — total stop (tidak termasuk depot)
+        }
     """
-
     try:
-        settings = get_settings()
-
         warnings = []
+        on_time_count = 0
 
         stops = [
             s for s in route.get("detail_perjalanan", [])
             if s.get("keterangan") not in ["Start", "Finish"]
+            and not str(s.get("nama_toko", "")).upper().startswith("GUDANG")
+            and not str(s.get("lokasi", "")).upper().startswith("GUDANG")
         ]
 
-        current_minutes = time_str_to_minutes(settings.vrp_start_time)
-
-        prev_lat = settings.depo_lat
-        prev_lon = settings.depo_lon
+        total_stops = len(stops)
 
         for stop in stops:
+            jam_tiba_str = stop.get("jam_tiba") or stop.get("jam")
+            arrival_min = _parse_jam(jam_tiba_str)
 
-            lat = stop.get("lat")
-            lon = stop.get("lon")
-
-            if not lat or not lon:
+            # Kalau jam tiba tidak ada / tidak bisa di-parse, skip
+            if arrival_min is None:
+                total_stops -= 1
                 continue
 
-            jam_tiba_str = stop.get("jam_tiba")
+            tw_end = _get_tw_end(stop)
+            if tw_end is None:
+                on_time_count += 1
+                continue
 
-            arrival_minutes = time_str_to_minutes(jam_tiba_str)
+            store_name = (
+                stop.get("nama_toko")
+                or stop.get("storeName")
+                or stop.get("lokasi")
+                or "Toko"
+            )
 
-            tw_end = stop.get("tw_end")
+            if arrival_min > tw_end:
+                delay = arrival_min - tw_end
+                severity = "HIGH" if delay > 30 else "LOW"
 
-            if tw_end and arrival_minutes > tw_end:
-
-                delay = arrival_minutes - tw_end
+                # Format jam untuk tampilan
+                jam_tutup_fmt = f"{tw_end // 60:02d}:{tw_end % 60:02d}"
 
                 warnings.append({
-                    "stop_order": stop.get("urutan"),
-                    "store_name": stop.get("nama_toko"),
-                    "planned_eta": jam_tiba_str,
+                    "stop_order":    stop.get("urutan"),
+                    "store_name":    store_name,
+                    "planned_eta":   jam_tiba_str,
+                    "jam_tutup":     jam_tutup_fmt,
                     "delay_minutes": delay,
-                    "severity": "HIGH" if delay > 30 else "LOW",
-                    "truck_id": route.get("route_id"),
-                    "armada": route.get("armada")
+                    "severity":      severity,
+                    "truck_id":      route.get("route_id"),
+                    "armada":        route.get("armada"),
+                    # Field tambahan untuk RoutePreviewModal
+                    "real_eta_traffic": jam_tiba_str,
                 })
-
-            prev_lat = lat
-            prev_lon = lon
+            else:
+                on_time_count += 1
 
         return {
-            "warnings": warnings,
-            "has_critical": any(
-                w["severity"] == "HIGH"
-                for w in warnings
-            ),
-            "route_id": route.get("route_id")
+            "warnings":      warnings,
+            "has_critical":  any(w["severity"] == "HIGH" for w in warnings),
+            "route_id":      route.get("route_id"),
+            "on_time_count": on_time_count,
+            "total_stops":   total_stops,
         }
 
     except Exception as e:
-        logger.error(f"🚨 VALIDATE TRAFFIC ERROR: {str(e)}")
-
+        logger.error(f"🚨 VALIDATE SCHEDULE ERROR: {str(e)}")
         return {
-            "warnings": [],
-            "has_critical": False,
-            "route_id": route.get("route_id"),
-            "error": str(e)
+            "warnings":      [],
+            "has_critical":  False,
+            "route_id":      route.get("route_id"),
+            "on_time_count": 0,
+            "total_stops":   0,
+            "error":         str(e),
         }

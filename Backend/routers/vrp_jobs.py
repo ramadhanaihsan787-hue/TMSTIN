@@ -90,9 +90,51 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         if not vehicles:
             raise Exception("Armada tidak tersedia!")
 
-        update_job_status(VRP_JOBS, job_id, "processing", 35, "Membangun matrix jarak via OSRM...")
+        update_job_status(VRP_JOBS, job_id, "processing", 30, "Menyiapkan data VRP...")
 
         vrp_input = vrp_service.VRPService.prepare_vrp_data(pending_orders, vehicles, settings)
+
+        # ── ZONING INTEGRATION ────────────────────────────────────────────────
+        # Cluster toko ke zona geografis sebelum build OSRM matrix.
+        # Hasilnya disimpan di vrp_input["zone_clusters"] sebagai metadata.
+        # Untuk saat ini: dipakai untuk progress reporting dan future warm start.
+        # Next step (>150 toko): gunakan untuk pecah matriks per zona.
+        try:
+            n_stores = len(pending_orders)
+            n_zones  = min(len(vehicles), 7)
+            update_job_status(
+                VRP_JOBS, job_id, "processing", 35,
+                f"Clustering {n_stores} toko ke {n_zones} zona geografis..."
+            )
+            store_locs_for_zone = [
+                {
+                    "lat":       float(o.latitude),
+                    "lon":       float(o.longitude),
+                    "nama_toko": o.customer.store_name if o.customer else "Toko",
+                    "order_id":  o.order_id,
+                    "weight":    float(o.weight_total),
+                }
+                for o in pending_orders
+            ]
+            zone_clusters = zoning_service.cluster_stores_for_routing(
+                store_locs_for_zone, num_zones=n_zones
+            )
+            vrp_input["zone_clusters"] = zone_clusters
+            logger.info(
+                f"🗺️  Zoning: {n_stores} toko → {len(zone_clusters)} cluster "
+                f"({[len(c) for c in zone_clusters]} toko/zona)"
+            )
+        except Exception as zone_err:
+            # Zoning gagal → lanjut tanpa clustering (tidak fatal)
+            logger.warning(f"⚠️ Zoning gagal (lanjut tanpa cluster): {zone_err}")
+            vrp_input["zone_clusters"] = []
+        # ── END ZONING ────────────────────────────────────────────────────────
+
+        n_locs = len(pending_orders) + 1  # +1 depot
+        update_job_status(
+            VRP_JOBS, job_id, "processing", 42,
+            f"Membangun matrix {n_locs}×{n_locs} via OSRM..."
+        )
 
         locs = [{"lat": lat, "lon": lon} for lat, lon in vrp_input["coordinates"]]
         departure_hour = vrp_input.get('departure_hour', 7)
@@ -100,7 +142,7 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
         if not dist_mat:
             dist_mat, time_mat = osrm_service.build_haversine_matrix(locs, departure_hour=departure_hour)
 
-        update_job_status(VRP_JOBS, job_id, "processing", 50, "OR-Tools sedang menghitung rute optimal...")
+        update_job_status(VRP_JOBS, job_id, "processing", 55, "OR-Tools sedang menghitung rute optimal...")
 
         hasil = vrp_service.VRPService.solve_and_format(vrp_input, dist_mat, time_mat, settings)
 

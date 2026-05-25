@@ -1,6 +1,7 @@
 # Backend/routers/vrp_routes.py
 import datetime
 import json
+import re
 import os
 import shutil
 import logging
@@ -97,14 +98,21 @@ def get_routes(
                 "order_id": order.order_id,
             })
 
+        # Baca geometry dari kolom DB (bukan file yang tidak pernah ditulis)
         garis_aspal = []
         try:
-            with open(f"route_geometries/{rute.route_id}.json", "r") as f:
-                garis_aspal = json.load(f)
+            if rute.route_geometry:
+                garis_aspal = json.loads(rute.route_geometry)
         except Exception:
-            pass  
+            pass
 
-        idx_zona = int(rute.route_id[-1]) % len(zona_dummy) if rute.route_id[-1].isdigit() else 0
+        # Ekstrak nomor truk dari format "RP-YYYYMMDD-T{n}" dengan regex
+        # Fallback ke hash untuk format route_id lain (distribusi merata)
+        _zona_match = re.search(r'T(\d+)$', rute.route_id)
+        if _zona_match:
+            idx_zona = (int(_zona_match.group(1)) - 1) % len(zona_dummy)
+        else:
+            idx_zona = abs(hash(rute.route_id)) % len(zona_dummy)
         transport_cost = round(
             (rute.total_distance_km or 0)
             * (settings.cost_fuel_per_liter / settings.cost_avg_km_per_liter)
@@ -203,17 +211,14 @@ def resequence_routes(
             if not dist_mat:
                 dist_mat, time_mat = osrm_service.build_haversine_matrix(locations)
 
-            # CATATAN: matrix_km masih dipakai sebagai cost function OR-Tools.
-            # Kehilangan presisi <1km sudah diketahui (lihat audit) — untuk produksi
-            # ganti dengan dist_mat langsung (meter) setelah solver diuji ulang.
-            matrix_km = [[int(d / 1000) for d in row] for row in dist_mat]
-
+            # Pakai dist_mat langsung (meter) — tidak ada lagi pembulatan ke km
+            # yang membuang presisi untuk toko-toko berdekatan (<1 km)
             caps = [sum(demands) + 9999]
             is_mall = [False] * len(locations)
             time_windows = [(0, 1440)] * len(locations)
 
             hasil_tsp = vrp_solver.solve_vrp(
-                matrix_km, time_mat, demands, 1, caps, is_mall, time_windows, BASE_DROP, VAR_DROP
+                dist_mat, time_mat, demands, 1, caps, is_mall, time_windows, BASE_DROP, VAR_DROP
             )
 
             best_indices = (
@@ -388,6 +393,10 @@ def confirm_routes(
             if str(hlp_id).lower() in ["103", "0", "", "none", "null"]:
                 hlp_id = None
 
+            # Simpan geometry ke DB (menggantikan file route_geometries/*.json)
+            _garis = truk.get("garis_aspal") or []
+            _geo_json = json.dumps(_garis) if _garis else None
+
             new_plan = models.TMSRoutePlan(
                 route_id=route_id,
                 planning_date=today,
@@ -396,6 +405,7 @@ def confirm_routes(
                 helper_id=hlp_id,
                 total_weight=truk.get("total_muatan_kg", 0),
                 total_distance_km=truk.get("total_jarak_km", 0),
+                route_geometry=_geo_json,
             )
             db.add(new_plan)
 
