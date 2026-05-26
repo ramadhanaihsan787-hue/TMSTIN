@@ -241,10 +241,12 @@ MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 async def submit_epod(
     line_id: int,
     file: UploadFile = File(...),
-    has_return: str = Form("false"), 
+    has_return: str = Form("false"),
     return_product: str = Form(""),
     return_qty: float = Form(0.0),
     return_reason: str = Form(""),
+    gps_lat: float = Form(0.0),   # koordinat GPS driver saat submit ePOD
+    gps_lon: float = Form(0.0),   # koordinat GPS driver saat submit ePOD
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -299,6 +301,46 @@ async def submit_epod(
             buffer.write(file_content)
 
         photo_url = f"/static/uploads/epod/{filename}"
+
+        # ── GEOFENCE CHECK ────────────────────────────────────────────────────
+        # Bandingkan GPS driver dengan koordinat toko dari master/order.
+        # Kalau di luar radius → flag anomali & update actual_lat/lng toko.
+        # Tidak memblokir submission (cold chain tidak boleh delay).
+        if gps_lat != 0.0 and gps_lon != 0.0:
+            try:
+                from services.eta_service import calculate_haversine
+                settings_gf = db.query(models.SystemSettings).first()
+                radius_m = float(settings_gf.geofence_radius_meters) if settings_gf else 200.0
+
+                order_lat = float(line.order.latitude) if line.order.latitude else 0.0
+                order_lon = float(line.order.longitude) if line.order.longitude else 0.0
+
+                if order_lat != 0.0 and order_lon != 0.0:
+                    dist_m = calculate_haversine(gps_lat, gps_lon, order_lat, order_lon)
+                    if dist_m > radius_m:
+                        # Driver di luar geofence — tandai line sebagai anomali
+                        line.is_anomaly = True
+                        logger.warning(
+                            f"⚠️ [GEOFENCE] DO {line.order_id}: driver {dist_m:.0f}m "
+                            f"dari toko (radius {radius_m}m)"
+                        )
+                        # Update actual_lat/lng customer dengan posisi GPS driver (lebih akurat)
+                        if line.order.customer:
+                            line.order.customer.actual_lat = gps_lat
+                            line.order.customer.actual_lng = gps_lon
+                    else:
+                        logger.info(
+                            f"✅ [GEOFENCE] DO {line.order_id}: driver dalam radius "
+                            f"({dist_m:.0f}m dari {radius_m}m)"
+                        )
+                        # Konfirmasi actual location toko dengan GPS aktual driver
+                        if line.order.customer:
+                            line.order.customer.actual_lat = gps_lat
+                            line.order.customer.actual_lng = gps_lon
+                db.flush()
+            except Exception as gf_err:
+                logger.warning(f"⚠️ [GEOFENCE] Gagal cek (tidak fatal): {gf_err}")
+        # ── END GEOFENCE CHECK ─────────────────────────────────────────────────
 
         ai_result = submit_epod_with_ai(
             db=db,

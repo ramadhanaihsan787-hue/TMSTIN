@@ -93,7 +93,13 @@ export default function CustomerForm({ isEdit, isSaving, formData, setFormData, 
                                         <input required value={formData.lon} onChange={(e) => setFormData({...formData, lon: e.target.value})} className="w-full bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-orange-500/20 text-sm py-3 px-4 font-medium transition-all dark:text-white outline-none" placeholder="106.8272" type="text" />
                                     </div>
                                 </div>
-                                <CustomerMapPreview />
+                                <CustomerMapPreview
+                                    lat={formData.lat}
+                                    lon={formData.lon}
+                                    onCoordinateChange={(newLat, newLon) =>
+                                        setFormData({ ...formData, lat: newLat, lon: newLon })
+                                    }
+                                />
                             </div>
                         </div>
                     </div>

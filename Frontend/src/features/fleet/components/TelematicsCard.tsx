@@ -52,16 +52,16 @@ export default function TelematicsCard({ telematics }: TelematicsCardProps) {
                     <span className={`text-6xl font-black tracking-tighter ${isWarning ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'}`}>
                         {telematics.temperature.toFixed(1)}
                     </span>
-                    <span className="text-2xl font-bold text-slate-400 dark:text-slate-500">°C</span>
+                    <span className="text-2xl font-bold text-slate-500 dark:text-slate-400">°C</span>
                 </div>
 
                 <div className="relative z-10 mt-4 flex items-center justify-between border-t border-slate-200/60 dark:border-slate-700/60 pt-4">
                     <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Target</span>
+                        <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Target</span>
                         <span className="text-xs font-black text-slate-700 dark:text-slate-300">&lt; 4.0 °C</span>
                     </div>
                     <div className="flex flex-col text-right">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Variance</span>
+                        <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Variance</span>
                         <span className={`text-xs font-black ${telematics.temperature > 4.0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                             {telematics.temperature > 4.0 ? '+' : ''}{(telematics.temperature - 4.0).toFixed(1)} °C
                         </span>
@@ -76,8 +76,8 @@ export default function TelematicsCard({ telematics }: TelematicsCardProps) {
                         <span className={`material-symbols-outlined text-xl ${telematics.compressorStatus === 'ON' ? 'animate-[spin_3s_linear_infinite]' : ''}`}>mode_fan</span>
                     </div>
                     <div className="overflow-hidden">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">Compressor</p>
-                        <p className={`text-sm font-black ${telematics.compressorStatus === 'ON' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>
+                        <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Compressor</p>
+                        <p className={`text-sm font-black ${telematics.compressorStatus === 'ON' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600'}`}>
                             {telematics.compressorStatus}
                         </p>
                     </div>
@@ -88,7 +88,7 @@ export default function TelematicsCard({ telematics }: TelematicsCardProps) {
                         <span className="material-symbols-outlined text-xl">satellite_alt</span>
                     </div>
                     <div className="overflow-hidden">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">GPS Signal</p>
+                        <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">GPS Signal</p>
                         <p className="text-sm font-black text-blue-600 dark:text-blue-400">{telematics.gpsSignal}</p>
                     </div>
                 </div>
@@ -100,8 +100,8 @@ export default function TelematicsCard({ telematics }: TelematicsCardProps) {
                             <span className="material-symbols-outlined text-xl">door_back</span>
                         </div>
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Box Door Status</p>
-                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Physical security lock</p>
+                            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Box Door Status</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Physical security lock</p>
                         </div>
                     </div>
                     <span className={`px-3 py-1.5 text-[10px] font-black rounded-xl flex items-center gap-1.5 tracking-wider uppercase ${telematics.doorLocked ? 'bg-slate-100 text-slate-700 dark:bg-[#222] dark:text-slate-300' : 'bg-rose-500 text-white shadow-lg shadow-rose-500/30 animate-pulse'}`}>

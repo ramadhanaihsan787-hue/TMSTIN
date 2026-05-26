@@ -44,46 +44,53 @@ export default function OverviewDashboard() {
                 const endDate = today.toISOString().split('T')[0];
                 const startDate = lastMonth.toISOString().split('T')[0];
 
-                const response = await api.get('/analytics/kpi-summary', {
-                    params: { startDate, endDate }
-                });
+                // Ambil data hari ini dari manager/overview (lebih kaya dari kpi-summary)
+                const [overviewRes, kpiRes] = await Promise.all([
+                    api.get('/api/manager/overview'),
+                    api.get('/analytics/kpi-summary', { params: { startDate, endDate } })
+                ]);
 
-                const resData = response.data;
+                const ov = overviewRes.data?.data || {};
+                const kpi = kpiRes.data;
 
-                if (resData.status === "success") {
-                    const avgPayloadTon = resData.active_fleet_count > 0 
-                        ? (resData.total_weight_kg / resData.active_fleet_count / 1000).toFixed(1)
+                if (overviewRes.data?.status === "success") {
+                    let autoRiskColor = "text-gray-500";
+                    if (ov.risk_level === "Low Range")    autoRiskColor = "text-emerald-500";
+                    if (ov.risk_level === "Medium Range") autoRiskColor = "text-orange-500";
+                    if (ov.risk_level === "High Risk")    autoRiskColor = "text-red-500";
+
+                    const avgPayloadTon = ov.active_fleet_today > 0
+                        ? ((ov.total_weight_today || 0) / ov.active_fleet_today / 1000).toFixed(1)
                         : 0;
 
-                    let autoRiskColor = "text-gray-500";
-                    if (resData.risk_level === "Low Range") autoRiskColor = "text-emerald-500";
-                    if (resData.risk_level === "Medium Range") autoRiskColor = "text-orange-500";
-                    if (resData.risk_level === "High Risk") autoRiskColor = "text-red-500";
-
                     setKpiData({
-                        otif: resData.success_rate_percent || 0,
-                        onTime: resData.success_rate_percent || 0, 
-                        avgLeadTime: resData.data?.avgLeadTime || 0,
-                        fillRate: resData.data?.fillRate || 0,
-                        returnRate: resData.data?.returnRate || 0,
-                        transportCost: resData.data?.transportCost || 0, 
-                        loadUtilization: resData.load_factor_percent || 0,
-                        
-                        todayTarget: resData.total_weight_kg || 0,
-                        todayRemaining: resData.remaining_weight_kg || resData.total_weight_kg || 0, 
-                        completedQty: resData.completed_qty || 0, 
-                        completedPercent: resData.completed_percent || 0, 
-                        completedDrops: resData.completed_drops || 0, 
-                        inTransitQty: resData.in_transit_qty || 0, 
-                        inTransitPercent: resData.in_transit_percent || 0, 
-                        inTransitDrops: resData.in_transit_drops || 0, 
-                        avgPayload: Number(avgPayloadTon),
-                        utilization: resData.load_factor_percent || 0,
+                        // KPI dari kpi-summary (30 hari)
+                        otif:           kpi?.success_rate_percent || 0,
+                        onTime:         ov.on_time_rate           || 0,
+                        avgLeadTime:    kpi?.data?.avgLeadTime     || 0,
+                        fillRate:       kpi?.data?.fillRate        || 0,
+                        returnRate:     kpi?.data?.returnRate      || 0,
+                        transportCost:  ov.estimated_cost_rp      || 0,
+                        loadUtilization: kpi?.load_factor_percent  || 0,
 
-                        estCompletion: resData.est_completion || "--:--",
-                        completionPeriod: resData.completion_period || "",
-                        riskLevel: resData.risk_level || "N/A",
-                        riskColor: autoRiskColor
+                        // Progress hari ini dari manager/overview
+                        todayTarget:      ov.total_weight_today   || 0,
+                        todayRemaining:   Math.max(0, (ov.total_weight_today || 0) - (ov.weight_done || 0)),
+                        completedQty:     ov.weight_done          || 0,
+                        completedPercent: ov.completed_percent     || 0,
+                        completedDrops:   (ov.done_success || 0) + (ov.done_partial || 0),
+                        inTransitQty:     ov.in_transit           || 0,
+                        inTransitPercent: ov.total_orders > 0
+                            ? Math.round(((ov.in_transit || 0) / ov.total_orders) * 100)
+                            : 0,
+                        inTransitDrops:   ov.in_transit           || 0,
+                        avgPayload:       Number(avgPayloadTon),
+                        utilization:      kpi?.load_factor_percent || 0,
+
+                        estCompletion:    ov.est_completion        || "--:--",
+                        completionPeriod: "",
+                        riskLevel:        ov.risk_level            || "N/A",
+                        riskColor:        autoRiskColor,
                     });
                 }
             } catch (error) {

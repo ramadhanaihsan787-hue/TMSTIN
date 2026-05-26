@@ -207,9 +207,11 @@ def resequence_routes(
                 demands.append(int(berat))
                 customer_map[idx + 1] = c
 
-            dist_mat, time_mat = osrm_service.build_osrm_matrix(locations)
+            # Pass departure_hour aktual agar traffic factor sesuai jam resequence
+            _reseq_hour = datetime.now().hour
+            dist_mat, time_mat = osrm_service.build_osrm_matrix(locations, departure_hour=_reseq_hour)
             if not dist_mat:
-                dist_mat, time_mat = osrm_service.build_haversine_matrix(locations)
+                dist_mat, time_mat = osrm_service.build_haversine_matrix(locations, departure_hour=_reseq_hour)
 
             # Pakai dist_mat langsung (meter) — tidak ada lagi pembulatan ke km
             # yang membuang presisi untuk toko-toko berdekatan (<1 km)

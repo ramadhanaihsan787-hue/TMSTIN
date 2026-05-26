@@ -1,43 +1,60 @@
-// src/features/fleet/components/FuelLog.tsx
+import type { FuelLogEntry } from "../types";
 
 interface FuelLogProps {
+    logs: FuelLogEntry[];
     onInputFuel: () => void;
 }
 
-export default function FuelLog({ onInputFuel }: FuelLogProps) {
+export default function FuelLog({ logs, onInputFuel }: FuelLogProps) {
     return (
-        <div className="space-y-3 flex-1 flex flex-col">
-            <div className="flex items-center justify-between">
-                <h5 className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Fuel Expenses Log</h5>
-                <button className="text-[10px] font-bold text-primary hover:underline">View All</button>
+        <div className="bg-app-panel border border-app-border rounded-xl p-5 shadow-sm transition-all duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <h5 className="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-app-orange">local_gas_station</span>
+                    Fuel Expenses Log
+                </h5>
+                <button 
+                    onClick={onInputFuel}
+                    className="text-xs font-bold text-app-orange hover:underline flex items-center gap-1 cursor-pointer transition-all hover:scale-105 active:scale-95"
+                >
+                    <span className="material-symbols-outlined text-sm font-bold">add</span> 
+                    Isi Biaya Bensin Manual
+                </button>
             </div>
             
-            <div className="space-y-2 flex-1">
-                {/* Dummy Data, nanti bisa di-map dari props kalau API bensinnya udah ada */}
-                <div className="p-3 bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333] rounded-xl flex items-center justify-between transition-colors hover:border-primary/30">
-                    <div>
-                        <p className="text-xs font-bold text-[#111] dark:text-white">24 Feb 2026</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">45 L • Shell Pertamina</p>
-                    </div>
-                    <p className="text-xs font-black text-primary">Rp 450.500</p>
+            {/* Grid of logs */}
+            {logs.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {logs.map((log) => (
+                        <div 
+                            key={log.id} 
+                            className="p-3 bg-slate-50 dark:bg-app-bg/50 border border-app-border rounded-xl flex items-center justify-between transition-all duration-300 hover:border-app-orange/30 hover:bg-slate-100 dark:hover:bg-app-bg/90"
+                        >
+                            <div>
+                                <p className="text-xs font-bold text-slate-800 dark:text-white">{log.date}</p>
+                                <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">
+                                    {log.volumeLiters} L • {log.station}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs font-black text-app-orange">
+                                    Rp {log.cost.toLocaleString('id-ID')}
+                                </p>
+                                <p className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 uppercase tracking-wider font-semibold">
+                                    {log.id.startsWith("temp-") ? "Just Added" : log.id}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-                <div className="p-3 bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333] rounded-xl flex items-center justify-between transition-colors hover:border-primary/30">
-                    <div>
-                        <p className="text-xs font-bold text-[#111] dark:text-white">18 Feb 2026</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">42 L • SPBU 34.12</p>
-                    </div>
-                    <p className="text-xs font-black text-primary">Rp 420.200</p>
+            ) : (
+                <div className="text-center py-6 text-slate-500 dark:text-slate-400 border border-app-border border-dashed rounded-xl bg-slate-50 dark:bg-app-bg/20">
+                    <span className="material-symbols-outlined text-3xl mb-1 text-slate-400 dark:text-slate-600 block">receipt_long</span>
+                    <p className="font-semibold text-xs">Belum ada log bensin masuk</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-500 mt-0.5">Silakan isi biaya bensin manual lewat tombol di kanan atas.</p>
                 </div>
-            </div>
-
-            {/* Action Button */}
-            <button 
-                onClick={onInputFuel} 
-                className="w-full mt-4 py-3.5 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0"
-            >
-                <span className="material-symbols-outlined text-[16px]">local_gas_station</span>
-                Input Resi Bensin (Manual)
-            </button>
+            )}
         </div>
     );
 }

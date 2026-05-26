@@ -129,6 +129,10 @@ class VRPService:
         time_windows = [(start_min, end_min)]
         order_mapping: Dict[int, str] = {}
 
+        # Per-node custom service time dari EMA historis ePOD
+        # 0.0 = pakai formula flat (base + qty*var), >0 = pakai data aktual
+        custom_service_times = [0.0]  # index 0 = depot
+
         for idx, order in enumerate(orders):
             coordinates.append((float(order.latitude), float(order.longitude)))
             demands.append(int(order.weight_total))
@@ -149,6 +153,18 @@ class VRPService:
 
             order_mapping[idx + 1] = order.order_id
 
+            # EMA service time per toko — dari data historis bongkar nyata
+            # Kalau ada data (>0.1 menit/kg), hitung estimasi total menit bongkar
+            avg_spk = 0.0
+            if hasattr(order, 'customer') and order.customer:
+                avg_spk = float(order.customer.avg_service_time_per_kg or 0.0)
+            if avg_spk > 0.1:
+                estimated_mins = avg_spk * float(order.weight_total or 1.0)
+                # Clamp antara 5 menit (minimum) dan 120 menit (maksimum)
+                custom_service_times.append(max(5.0, min(120.0, estimated_mins)))
+            else:
+                custom_service_times.append(0.0)  # pakai formula default
+
         # Kapasitas truk dengan buffer dari settings DB (bukan hardcode 0.9)
         buffer_pct = getattr(settings, 'vrp_capacity_buffer_percent', 90)
         capacities = [
@@ -157,15 +173,16 @@ class VRPService:
         ]
 
         return {
-            'coordinates':   coordinates,
-            'demands':       demands,
-            'capacities':    capacities,
-            'num_vehicles':  len(vehicles),
-            'time_windows':  time_windows,
-            'is_mall_list':  is_mall_list,
-            'order_mapping': order_mapping,
-            # Departure hour untuk traffic factor OSRM
-            'departure_hour': start_min // 60,
+            'coordinates':        coordinates,
+            'demands':            demands,
+            'capacities':         capacities,
+            'num_vehicles':       len(vehicles),
+            'time_windows':       time_windows,
+            'is_mall_list':       is_mall_list,
+            'order_mapping':      order_mapping,
+            'departure_hour':     start_min // 60,
+            # EMA service time per node — 0.0 berarti pakai formula flat
+            'custom_service_times': custom_service_times,
         }
 
     # ─────────────────────────────────────────────────────────────────────
@@ -192,16 +209,17 @@ class VRPService:
 
         # [2] Solve
         raw = vrp_solver.solve_vrp(
-            distance_matrix  = distance_matrix,
-            time_matrix      = time_matrix,
-            demands          = vrp_input['demands'],
-            num_vehicles     = vrp_input['num_vehicles'],
-            vehicle_capacities = vrp_input['capacities'],
-            is_mall_list     = vrp_input['is_mall_list'],
-            time_windows     = vrp_input['time_windows'],
-            base_drop_time   = settings.vrp_base_drop_time_mins,
-            var_drop_time    = settings.vrp_var_drop_time_mins,
-            warm_start_routes = warm_start,
+            distance_matrix       = distance_matrix,
+            time_matrix           = time_matrix,
+            demands               = vrp_input['demands'],
+            num_vehicles          = vrp_input['num_vehicles'],
+            vehicle_capacities    = vrp_input['capacities'],
+            is_mall_list          = vrp_input['is_mall_list'],
+            time_windows          = vrp_input['time_windows'],
+            base_drop_time        = settings.vrp_base_drop_time_mins,
+            var_drop_time         = settings.vrp_var_drop_time_mins,
+            warm_start_routes     = warm_start,
+            custom_service_times  = vrp_input.get('custom_service_times'),
         )
 
         if not raw:

@@ -1,23 +1,21 @@
-// src/features/fleet/components/FleetDetailPanel.tsx
 import { useState } from "react";
 import type { FleetVehicle, TelematicsData } from "../types";
 import TelematicsCard from "./TelematicsCard";
-import FuelLog from "./FuelLog";
 
 interface FleetDetailPanelProps {
     selectedTruck: FleetVehicle | null;
     telematics: TelematicsData | null;
     onAssignDriver: () => void;
     onReportIssue: () => void;
-    onInputFuel: () => void;
+    onInputFuel?: () => void;
 }
 
 export default function FleetDetailPanel({ 
     selectedTruck, 
     telematics, 
     onAssignDriver, 
-    onReportIssue, 
-    onInputFuel 
+    onReportIssue,
+    onInputFuel
 }: FleetDetailPanelProps) {
     const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
@@ -66,6 +64,14 @@ export default function FleetDetailPanel({
                                 >
                                     <span className="material-symbols-outlined text-[18px]">person_add</span> Ganti Supir
                                 </button>
+                                {onInputFuel && (
+                                    <button 
+                                        onClick={() => { onInputFuel(); setIsActionMenuOpen(false); }} 
+                                        className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#222] flex items-center gap-2"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">local_gas_station</span> Catat Bensin
+                                    </button>
+                                )}
                                 <button 
                                     onClick={() => { onReportIssue(); setIsActionMenuOpen(false); }} 
                                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/10 flex items-center gap-2"
@@ -80,12 +86,6 @@ export default function FleetDetailPanel({
 
             {/* Komponen Telematics */}
             <TelematicsCard telematics={telematics} />
-
-            {/* Pembatas */}
-            <div className="h-px bg-slate-200 dark:bg-[#333] w-full shrink-0"></div>
-
-            {/* Komponen Log Bensin */}
-            <FuelLog onInputFuel={onInputFuel} />
             
         </aside>
     );

@@ -17,6 +17,53 @@
   --color-japfa-red: #E53E3E;
   --color-japfa-gray: #64748b;
   --color-japfa-light: #f8fafc;
+
+  /* Nexus Logistic Premium Theme colors */
+  --color-app-bg: var(--app-bg);
+  --color-app-panel: var(--app-panel);
+  --color-app-panel-hover: var(--app-panel-hover);
+  --color-app-border: var(--app-border);
+  --color-app-orange: var(--app-orange);
+  --color-app-orange-bg: var(--app-orange-bg);
+  --color-app-green: var(--app-green);
+  --color-app-green-bg: var(--app-green-bg);
+  --color-app-red: var(--app-red);
+  --color-app-red-bg: var(--app-red-bg);
+  --color-app-text: var(--app-text);
+  --color-app-muted: var(--app-muted);
+  --color-app-accent: var(--app-accent);
+}
+
+:root {
+  --app-bg: #f8fafc;
+  --app-panel: #ffffff;
+  --app-panel-hover: #f1f5f9;
+  --app-border: #e2e8f0;
+  --app-orange: #FF7A00;
+  --app-orange-bg: rgba(255, 122, 0, 0.08);
+  --app-green: #10b981;
+  --app-green-bg: rgba(16, 185, 129, 0.08);
+  --app-red: #ef4444;
+  --app-red-bg: rgba(239, 68, 68, 0.08);
+  --app-text: #0f172a;
+  --app-muted: #64748b;
+  --app-accent: #3b82f6;
+}
+
+.dark {
+  --app-bg: #0f1115;
+  --app-panel: #1c1e24;
+  --app-panel-hover: #252830;
+  --app-border: #25272c;
+  --app-orange: #FF7A00;
+  --app-orange-bg: rgba(255, 122, 0, 0.1);
+  --app-green: #10b981;
+  --app-green-bg: rgba(16, 185, 129, 0.1);
+  --app-red: #ef4444;
+  --app-red-bg: rgba(239, 68, 68, 0.1);
+  --app-text: #e2e8f0;
+  --app-muted: #94a3b8;
+  --app-accent: #3b82f6;
 }
 
 @layer base {

@@ -25,7 +25,8 @@ def solve_vrp(
     time_windows,
     base_drop_time,
     var_drop_time,
-    warm_start_routes=None,   # diterima tapi tidak dipakai (crash risk)
+    warm_start_routes=None,      # diterima tapi tidak dipakai (crash risk)
+    custom_service_times=None,   # per-node override dari EMA historis ePOD
 ):
     """
     Solver CVRPTW untuk distribusi frozen food JAPFA.
@@ -72,6 +73,9 @@ def solve_vrp(
     )
 
     # ── [C] DIMENSI WAKTU ─────────────────────────────────────────────────
+    # EMA service time per node — lebih akurat dari formula flat setelah data terkumpul
+    _svc = custom_service_times or []
+
     def time_callback(fi, ti):
         fn = manager.IndexToNode(fi)
         tn = manager.IndexToNode(ti)
@@ -79,7 +83,11 @@ def solve_vrp(
         if tn == 0:
             return int(travel)
         qty = data['demands'][tn]
-        service = (60 if is_mall_list[tn] else base_drop_time) + (qty * var_drop_time / 10.0)
+        # Priority: EMA historis (>0 = ada data nyata) → formula flat sebagai fallback
+        if _svc and tn < len(_svc) and _svc[tn] > 0:
+            service = _svc[tn]
+        else:
+            service = (60 if is_mall_list[tn] else base_drop_time) + (qty * var_drop_time / 10.0)
         return int(travel + service)
 
     time_cb = routing.RegisterTransitCallback(time_callback)

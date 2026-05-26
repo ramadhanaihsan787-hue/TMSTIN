@@ -8,6 +8,19 @@ export interface FleetVehicle {
     model: string;
     currentKm: number;
     status: FleetStatus;
+    // 🌟 Rich details from premium fleet monitor mockup
+    driverName?: string;
+    routeName?: string;
+    cargoType?: string;
+    eta?: string;
+    speedKmH?: number;
+    batteryPct?: number;
+    currentTemp?: number;
+    setPointTemp?: number;
+    tempStatus?: 'Healthy' | 'Warning' | 'Critical';
+    sparklineData?: number[];
+    latitude?: number;
+    longitude?: number;
     // 🌟 Buat jaga-jaga kalo backend ngirim data ekstra
     raw?: any; 
 }
