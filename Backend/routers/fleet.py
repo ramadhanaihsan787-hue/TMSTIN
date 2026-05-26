@@ -52,6 +52,7 @@ def get_all_fleet(
     result = []
 
     for v in vehicles:
+        # Ambil rute hari ini beserta driver, helper, dan stop count
         route_today = db.query(models.TMSRoutePlan).filter(
             models.TMSRoutePlan.vehicle_id == v.vehicle_id,
             models.TMSRoutePlan.planning_date == today
@@ -60,20 +61,52 @@ def get_all_fleet(
         current_load = float(route_today.total_weight) if route_today else 0.0
         load_pct = round((current_load / float(v.capacity_kg)) * 100, 1) if v.capacity_kg else 0
 
-        # 🌟 FIX CTO: Narik data bensin dari tabel OperationalExpense
+        # Driver & helper hari ini (dari rute yang sudah di-dispatch)
+        driver_name = None
+        helper_name = None
+        route_id_today = None
+        total_stops_today = 0
+        eta_last = None
+
+        if route_today:
+            route_id_today = route_today.route_id
+            if route_today.driver_id:
+                driver = db.query(models.HRDriver).filter(
+                    models.HRDriver.driver_id == route_today.driver_id
+                ).first()
+                driver_name = driver.name if driver else None
+            if route_today.helper_id:
+                helper = db.query(models.HRDriver).filter(
+                    models.HRDriver.driver_id == route_today.helper_id
+                ).first()
+                helper_name = helper.name if helper else None
+
+            # Hitung total stop & ETA terakhir hari ini
+            lines = db.query(models.TMSRouteLine).filter(
+                models.TMSRouteLine.route_id == route_today.route_id,
+                models.TMSRouteLine.sequence > 0,
+                models.TMSRouteLine.order_id != None
+            ).order_by(models.TMSRouteLine.sequence).all()
+
+            total_stops_today = len(lines)
+            if lines:
+                last_line = lines[-1]
+                if last_line.est_arrival:
+                    eta_last = f"{last_line.est_arrival.hour:02d}:{last_line.est_arrival.minute:02d}"
+
+        # Biaya BBM dari OperationalExpense
         expenses = db.query(models.OperationalExpense).filter(
             models.OperationalExpense.vehicle_id == v.vehicle_id,
             models.OperationalExpense.bbm > 0
         ).order_by(desc(models.OperationalExpense.date)).all()
 
         latest_fuel = expenses[0] if expenses else None
-
         fuel_history = []
         if latest_fuel:
             for fh in expenses[:5]:
                 fuel_history.append({
                     "date": str(fh.date),
-                    "km": 0, # Udah ngga ditrack detail per struk
+                    "km": 0,
                     "liters": 0.0,
                     "cost": f"Rp{fh.bbm:,.0f}" if fh.bbm else "Rp0",
                     "station": fh.notes or "-"
@@ -83,11 +116,12 @@ def get_all_fleet(
             "id": str(v.vehicle_id),
             "plateNumber": v.license_plate,
             "model": v.type,
-            "capacity": float(v.capacity_kg),
+            "capacity": float(v.capacity_kg) if v.capacity_kg else 0,
             "currentLoad": current_load,
             "loadPercent": load_pct,
             "status": v.status or "Available",
-            "isInternal": v.is_internal,
+            "isInternal": v.is_internal if v.is_internal is not None else True,
+            "isOncall": not (v.is_internal if v.is_internal is not None else True),
             "kmAwalHariIni": v.current_km or 0,
             "kmAkhirHariIni": None,
             "boxDimensions": {
@@ -95,9 +129,16 @@ def get_all_fleet(
                 "width": v.box_width_cm or 200,
                 "height": v.box_height_cm or 200
             },
+            # Driver & helper hari ini
+            "driverName": driver_name,
+            "helperName": helper_name,
+            "routeIdToday": route_id_today,
+            "totalStopsToday": total_stops_today,
+            "etaLast": eta_last,
+            # Fuel info
             "lastFuelDate": str(latest_fuel.date) if latest_fuel else "-",
             "lastFuelCost": f"Rp{latest_fuel.bbm:,.0f}" if latest_fuel and latest_fuel.bbm else "-",
-            "fuelEfficiency": 0.0, 
+            "fuelEfficiency": 0.0,
             "history": fuel_history
         })
 

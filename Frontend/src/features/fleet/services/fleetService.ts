@@ -26,6 +26,22 @@ export const fleetService = {
         return res.data;
     },
 
+    // TAMBAH TRUK ON-CALL (langsung daftarkan ke master armada)
+    addOncallTruck: async (data: {
+        plate_number: string;
+        vehicle_type: string;
+        capacity_kg: number;
+    }) => {
+        const res = await api.post('/api/fleet/oncall', data);
+        return res.data;
+    },
+
+    // UPDATE STATUS TRUK
+    updateStatus: async (vehicleId: string | number, status: string) => {
+        const res = await api.put(`/api/fleet/${vehicleId}/status`, { status });
+        return res.data;
+    },
+
     // INPUT BENSIN
     addFuelLog: async (vehicleId: string | number, data: any) => {
         const res = await api.post(`/api/fleet/${vehicleId}/fuel`, data);

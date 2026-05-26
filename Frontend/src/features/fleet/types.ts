@@ -1,6 +1,6 @@
 // src/features/fleet/types.ts
 
-export type FleetStatus = 'Available' | 'Maintenance' | 'On Trip' | string;
+export type FleetStatus = 'Available' | 'Maintenance' | 'On Trip' | 'Idle' | string;
 
 export interface FleetVehicle {
     id: string | number;
@@ -8,11 +8,20 @@ export interface FleetVehicle {
     model: string;
     currentKm: number;
     status: FleetStatus;
-    // 🌟 Rich details from premium fleet monitor mockup
+    capacity?: number;
+    currentLoad?: number;
+    loadPercent?: number;
+    isInternal?: boolean;
+    isOncall?: boolean;
+
+    // Crew hari ini (dari dispatch)
     driverName?: string;
-    routeName?: string;
-    cargoType?: string;
-    eta?: string;
+    helperName?: string;
+    routeIdToday?: string;
+    totalStopsToday?: number;
+    etaLast?: string;
+
+    // Telematics (dari vendor / simulasi)
     speedKmH?: number;
     batteryPct?: number;
     currentTemp?: number;
@@ -21,8 +30,13 @@ export interface FleetVehicle {
     sparklineData?: number[];
     latitude?: number;
     longitude?: number;
-    // 🌟 Buat jaga-jaga kalo backend ngirim data ekstra
-    raw?: any; 
+
+    // Fuel info
+    lastFuelDate?: string;
+    lastFuelCost?: string;
+    fuelEfficiency?: number;
+
+    raw?: any;
 }
 
 export interface FuelLogEntry {
@@ -39,4 +53,5 @@ export interface TelematicsData {
     compressorStatus: 'ON' | 'OFF';
     gpsSignal: 'STRONG' | 'WEAK' | 'LOST';
     doorLocked: boolean;
+    lastUpdate?: string;
 }

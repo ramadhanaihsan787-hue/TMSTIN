@@ -15,6 +15,7 @@ import Map, { Marker, Popup, Source, Layer } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { toast } from 'sonner';
+import { fleetService } from '../../fleet/services/fleetService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KONSTANTA
@@ -75,6 +76,12 @@ interface RoutePreviewModalProps {
     onResequence?: (draftData: any) => Promise<any>;
 }
 
+interface OncallFormData {
+    plate: string;
+    type: string;
+    capacity: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,6 +129,16 @@ export default function RoutePreviewModal({
     const [selectedPopup, setSelectedPopup] = useState<{ tIdx: number; sIdx: number; stop: any } | null>(null);
     const [draggedItem, setDraggedItem] = useState<{ tIdx: number; sIdx: number } | null>(null);
     const [dragOverTruck, setDragOverTruck] = useState<number | null>(null);
+
+    // ── ONCALL & DROPPED STORES ────────────────────────────────────────────
+    const [droppedStores, setDroppedStores] = useState<any[]>(
+        () => JSON.parse(JSON.stringify(previewData?.dropped_nodes_peta || []))
+    );
+    const [draggedDropped, setDraggedDropped] = useState<number | null>(null);
+    const [showOncallForm, setShowOncallForm] = useState(false);
+    const [oncallForm, setOncallForm]         = useState<OncallFormData>({ plate: '', type: 'CDD', capacity: '2500' });
+    const [isAddingOncall, setIsAddingOncall] = useState(false);
+    const [optimizingOncall, setOptimizingOncall] = useState<number | null>(null);
 
     useEffect(() => {
         setDraftData(JSON.parse(JSON.stringify(previewData)));
@@ -236,6 +253,109 @@ export default function RoutePreviewModal({
                 setIsDirty(false);
             }
         } catch {} finally { setIsResequencing(false); }
+    };
+
+    // ── DROP TOKO DARI BASKET KE TRUK ─────────────────────────────────────
+    const handleDropStoreToTruck = (truckIdx: number, storeIdx: number) => {
+        const store = droppedStores[storeIdx];
+        if (!store) return;
+
+        const newData = JSON.parse(JSON.stringify(draftData));
+        const truk    = newData.jadwal_truk_internal[truckIdx];
+
+        // Buat stop baru dari dropped store format
+        const newStop = {
+            nama_toko:            store.nama_toko,
+            lat:                  store.lat,
+            lon:                  store.lon,
+            latitude:             store.lat,
+            longitude:            store.lon,
+            berat_kg:             store.berat_kg,
+            turun_barang_kg:      store.berat_kg,
+            jam_tiba:             '--:--',
+            distance_from_prev_km: 0,
+            items:                store.items || [],
+            keterangan:           'Stop',
+            urutan:               (truk.detail_perjalanan?.length || 0),
+            // Flag: butuh TSP setelah ini
+        };
+
+        // Insert sebelum 'Finish' kalau ada, atau append
+        const finIdx = truk.detail_perjalanan.findLastIndex((s: any) => s.keterangan === 'Finish');
+        if (finIdx >= 0) truk.detail_perjalanan.splice(finIdx, 0, newStop);
+        else              truk.detail_perjalanan.push(newStop);
+
+        truk.total_muatan_kg = (truk.total_muatan_kg || 0) + store.berat_kg;
+
+        setDraftData(newData);
+        setDroppedStores(prev => prev.filter((_, i) => i !== storeIdx));
+        setIsDirty(true);
+        toast.success(`${store.nama_toko} dipindahkan ke ${truk.armada}!`);
+    };
+
+    // ── TAMBAH TRUK ONCALL ────────────────────────────────────────────────
+    const handleAddOncall = async () => {
+        if (!oncallForm.plate.trim()) { toast.error('Nomor plat wajib diisi!'); return; }
+        setIsAddingOncall(true);
+        try {
+            // Daftarkan ke master armada
+            const res = await fleetService.addOncallTruck({
+                plate_number: oncallForm.plate.trim().toUpperCase(),
+                vehicle_type: oncallForm.type,
+                capacity_kg:  parseInt(oncallForm.capacity) || 2500,
+            });
+
+            // Tambah ke jadwal_truk_internal di local state
+            const newData = JSON.parse(JSON.stringify(draftData));
+            const newTruk = {
+                route_id:          `ONCALL-${Date.now()}`,
+                armada:            oncallForm.plate.trim().toUpperCase(),
+                vehicle_id:        res.vehicle_id || null,
+                driver_id:         null,
+                helper_id:         null,
+                total_muatan_kg:   0,
+                total_jarak_km:    0,
+                is_oncall:         true,
+                color_index:       newData.jadwal_truk_internal.length,
+                detail_perjalanan: [
+                    { urutan: 0, keterangan: 'Start', nama_toko: '📍 GUDANG JAPFA',
+                      lat: -6.207356, lon: 106.479163 },
+                    { urutan: 99, keterangan: 'Finish', nama_toko: '📍 GUDANG JAPFA',
+                      lat: -6.207356, lon: 106.479163 },
+                ],
+                garis_aspal: [],
+            };
+            newData.jadwal_truk_internal.push(newTruk);
+            setDraftData(newData);
+
+            toast.success(`Truk On-Call ${oncallForm.plate} berhasil ditambahkan!`);
+            setShowOncallForm(false);
+            setOncallForm({ plate: '', type: 'CDD', capacity: '2500' });
+        } catch (e: any) {
+            toast.error(e?.response?.data?.detail || 'Gagal menambahkan truk on-call');
+        } finally {
+            setIsAddingOncall(false);
+        }
+    };
+
+    // ── TSP UNTUK TRUK ONCALL ─────────────────────────────────────────────
+    const handleOptimizeOncall = async (truckIdx: number) => {
+        if (!onResequence) return;
+        const armada = draftData.jadwal_truk_internal[truckIdx]?.armada;
+        const stops  = (draftData.jadwal_truk_internal[truckIdx]?.detail_perjalanan || [])
+            .filter((s: any) => s.keterangan !== 'Start' && s.keterangan !== 'Finish');
+        if (stops.length < 2) { toast.info('Minimal 2 toko untuk dioptimasi'); return; }
+
+        setOptimizingOncall(truckIdx);
+        try {
+            const updated = await onResequence(draftData);
+            if (updated) {
+                setDraftData(JSON.parse(JSON.stringify(updated)));
+                setIsDirty(false);
+                toast.success(`Urutan ${armada} berhasil dioptimasi!`);
+            }
+        } catch { toast.error('Gagal optimasi urutan'); }
+        finally { setOptimizingOncall(null); }
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -630,7 +750,8 @@ export default function RoutePreviewModal({
                                         onDragLeave={() => setDragOverTruck(null)}
                                         onDrop={(e) => {
                                             e.preventDefault(); setDragOverTruck(null);
-                                            if (draggedItem) handleMoveStop(draggedItem.tIdx, i, draggedItem.sIdx);
+                                            if (draggedDropped !== null) handleDropStoreToTruck(i, draggedDropped);
+                                            else if (draggedItem) handleMoveStop(draggedItem.tIdx, i, draggedItem.sIdx);
                                         }}
                                         className={`rounded-xl border transition-all overflow-hidden
                                             ${isActive
@@ -653,9 +774,12 @@ export default function RoutePreviewModal({
                                                     <span className="text-sm font-black text-white truncate">
                                                         {truk.armada}
                                                     </span>
-                                                    <span className="text-[10px] font-bold text-slate-500 shrink-0">
-                                                        {stops.length} toko
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        {truk.is_oncall && (
+                                                            <span className="text-[8px] bg-primary/20 text-primary px-1 py-0.5 rounded font-black">ON-CALL</span>
+                                                        )}
+                                                        <span className="text-[10px] font-bold text-slate-500">{stops.length} toko</span>
+                                                    </div>
                                                 </div>
                                                 {/* Capacity bar */}
                                                 <div className="mt-1.5 flex items-center gap-2">
@@ -768,11 +892,140 @@ export default function RoutePreviewModal({
                             })}
                         </div>
 
+                        {/* ── ONCALL + DROPPED STORES ────────────────────── */}
+                        {(droppedStores.length > 0 || draftData.jadwal_truk_internal?.some((t: any) => t.is_oncall)) && (
+                            <div className="shrink-0 border-t border-white/10 bg-[#0e0e0e]">
+                                {/* Tombol tambah truk oncall */}
+                                <div className="px-3 pt-3 pb-1">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            Truk On-Call
+                                        </span>
+                                        <button onClick={() => setShowOncallForm(v => !v)}
+                                            className="text-[10px] font-black text-primary hover:text-white flex items-center gap-0.5 transition-colors">
+                                            <span className="material-symbols-outlined text-[13px]">add</span>
+                                            Tambah Truk
+                                        </button>
+                                    </div>
+                                    {showOncallForm && (
+                                        <div className="bg-white/5 rounded-xl border border-primary/20 p-3 mb-2 space-y-2">
+                                            <input placeholder="Plat Nomor (B 1234 XYZ)"
+                                                value={oncallForm.plate}
+                                                onChange={e => setOncallForm(f => ({ ...f, plate: e.target.value }))}
+                                                className="w-full bg-white/8 border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-white placeholder-slate-500 outline-none focus:border-primary/50" />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <select value={oncallForm.type}
+                                                    onChange={e => setOncallForm(f => ({ ...f, type: e.target.value }))}
+                                                    className="bg-white/8 border border-white/10 rounded-lg px-2 py-2 text-xs font-bold text-white outline-none focus:border-primary/50">
+                                                    <option value="CDD">CDD (~2.5T)</option>
+                                                    <option value="CDE">CDE (~8T)</option>
+                                                    <option value="Fuso">Fuso (~6T)</option>
+                                                    <option value="L300">L300 (~1T)</option>
+                                                </select>
+                                                <input type="number" placeholder="Kapasitas KG"
+                                                    value={oncallForm.capacity}
+                                                    onChange={e => setOncallForm(f => ({ ...f, capacity: e.target.value }))}
+                                                    className="bg-white/8 border border-white/10 rounded-lg px-2 py-2 text-xs font-bold text-white placeholder-slate-500 outline-none focus:border-primary/50" />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={handleAddOncall} disabled={isAddingOncall}
+                                                    className="flex-1 py-2 bg-primary text-white text-[10px] font-black rounded-lg hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-1">
+                                                    {isAddingOncall
+                                                        ? <><span className="material-symbols-outlined text-[12px] animate-spin">sync</span>Menambahkan...</>
+                                                        : <><span className="material-symbols-outlined text-[12px]">add_circle</span>Konfirmasi</>}
+                                                </button>
+                                                <button onClick={() => setShowOncallForm(false)}
+                                                    className="px-3 py-2 bg-white/5 text-slate-400 text-[10px] font-bold rounded-lg hover:bg-white/10 transition-all">
+                                                    Batal
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                {/* Oncall truck cards dengan tombol TSP */}
+                                {draftData.jadwal_truk_internal?.filter((t: any) => t.is_oncall).map((truk: any) => {
+                                    const ti = draftData.jadwal_truk_internal.indexOf(truk);
+                                    const col = truckColors[(truk.color_index ?? ti) % truckColors.length];
+                                    const stops = (truk.detail_perjalanan || []).filter((s: any) => s.keterangan !== 'Start' && s.keterangan !== 'Finish');
+                                    return (
+                                        <div key={truk.route_id}
+                                            onDragOver={e => { e.preventDefault(); setDragOverTruck(ti); }}
+                                            onDragLeave={() => setDragOverTruck(null)}
+                                            onDrop={e => {
+                                                e.preventDefault(); setDragOverTruck(null);
+                                                if (draggedDropped !== null) handleDropStoreToTruck(ti, draggedDropped);
+                                                else if (draggedItem) handleMoveStop(draggedItem.tIdx, ti, draggedItem.sIdx);
+                                            }}
+                                            className={`mx-3 mb-2 rounded-xl border p-2.5 transition-all
+                                                ${dragOverTruck === ti ? 'ring-2 ring-primary border-primary/60 scale-[1.01]' : 'border-primary/20 bg-primary/5'}`}>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: col }} />
+                                                    <span className="text-[11px] font-black text-white">{truk.armada}</span>
+                                                    <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">ON-CALL</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400">{stops.length} toko</span>
+                                            </div>
+                                            {stops.length === 0 && (
+                                                <p className="text-[10px] text-slate-500 italic text-center py-1.5">
+                                                    Drag toko dari basket merah ke sini
+                                                </p>
+                                            )}
+                                            {stops.length >= 2 && (
+                                                <button onClick={() => handleOptimizeOncall(ti)} disabled={optimizingOncall === ti}
+                                                    className="w-full mt-1.5 py-1.5 bg-primary/20 border border-primary/40 text-primary text-[10px] font-black rounded-lg hover:bg-primary/30 transition-all disabled:opacity-50 flex items-center justify-center gap-1">
+                                                    {optimizingOncall === ti
+                                                        ? <><span className="material-symbols-outlined text-[12px] animate-spin">sync</span>Optimasi TSP...</>
+                                                        : <><span className="material-symbols-outlined text-[12px]">route</span>Optimasi Urutan TSP</>}
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {/* Dropped stores basket */}
+                                {droppedStores.length > 0 && (
+                                    <div className="px-3 pb-3">
+                                        <div className="flex items-center gap-1.5 mb-1.5">
+                                            <span className="material-symbols-outlined text-[13px] text-red-400">warning</span>
+                                            <span className="text-[10px] font-black text-red-400 uppercase">
+                                                {droppedStores.length} Toko Dropped
+                                            </span>
+                                            <span className="text-[9px] text-slate-500 ml-1">drag ke truk</span>
+                                        </div>
+                                        <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                                            {droppedStores.map((store, si) => (
+                                                <div key={si} draggable
+                                                    onDragStart={() => setDraggedDropped(si)}
+                                                    onDragEnd={() => setDraggedDropped(null)}
+                                                    className="flex items-center gap-2 bg-red-900/20 border border-red-500/30 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-red-400/50 transition-colors">
+                                                    <span className="material-symbols-outlined text-[12px] text-red-400">drag_indicator</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[10px] font-bold text-red-200 truncate">{store.nama_toko}</p>
+                                                        <p className="text-[9px] text-red-400">{store.berat_kg} KG</p>
+                                                    </div>
+                                                    <div className="flex gap-0.5 shrink-0">
+                                                        {draftData.jadwal_truk_internal?.map((truk: any, ti: number) => {
+                                                            const col = truckColors[(truk.color_index ?? ti) % truckColors.length];
+                                                            return (
+                                                                <button key={ti} title={`→ ${truk.armada}`}
+                                                                    onClick={() => handleDropStoreToTruck(ti, si)}
+                                                                    className="w-4 h-4 rounded-full border border-white/20 hover:scale-125 transition-transform"
+                                                                    style={{ backgroundColor: col }} />
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Footer hint */}
                         <div className="shrink-0 px-4 py-2.5 border-t border-white/8 bg-[#0d0d0d]">
                             <p className="text-[9px] text-slate-600 font-bold text-center leading-relaxed">
-                                Klik truk untuk focus • Drag nama toko untuk pindah rute •
-                                Klik marker di peta untuk detail
+                                Klik truk untuk focus • Drag toko dropped ke truk • Klik marker peta untuk detail
                             </p>
                         </div>
                     </div>

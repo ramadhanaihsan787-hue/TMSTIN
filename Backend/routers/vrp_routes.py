@@ -191,7 +191,10 @@ def resequence_routes(
             customers = [
                 s for s in stops
                 if str(s.get("keterangan", "")).lower() not in ["start", "finish"]
-                and s.get("urutan", 0) != 0
+                # Oncall stops tidak punya "urutan" eksplisit — filter by lat/lon valid
+                and s.get("lat") is not None
+                and s.get("lon") is not None
+                and not str(s.get("nama_toko", "") or s.get("lokasi", "")).upper().startswith("GUDANG")
             ]
 
             if len(customers) < 2:
