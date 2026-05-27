@@ -40,6 +40,16 @@ interface BopInputFormProps {
     setKuliAngkut: (val: string) => void;
     lainLain: string;
     setLainLain: (val: string) => void;
+    jamBerangkat: string;
+    setJamBerangkat: (val: string) => void;
+    jamPulang: string;
+    setJamPulang: (val: string) => void;
+    kmAwal: string;
+    setKmAwal: (val: string) => void;
+    kmAkhir: string;
+    setKmAkhir: (val: string) => void;
+
+    tripSource: 'driver_app' | 'manual' | null;
 }
 
 export const BopInputForm: React.FC<BopInputFormProps> = ({
@@ -71,6 +81,15 @@ export const BopInputForm: React.FC<BopInputFormProps> = ({
     setKuliAngkut,
     lainLain,
     setLainLain,
+    jamBerangkat,
+    setJamBerangkat,
+    jamPulang,
+    setJamPulang,
+    kmAwal,
+    setKmAwal,
+    kmAkhir,
+    setKmAkhir,
+    tripSource,
 }) => {
     return (
         <div className="flex-1 space-y-8 min-w-0">
@@ -169,6 +188,61 @@ export const BopInputForm: React.FC<BopInputFormProps> = ({
                         )}
                     </div>
                 </div>
+            </section>
+
+            {/* Section 1b: Data Perjalanan */}
+            <section className="bg-white dark:bg-[#111111] p-6 lg:p-8 rounded-xl shadow-sm dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)] border border-slate-100 dark:border-white/5">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-3xl">route</span>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Data Perjalanan</h2>
+                    </div>
+                    {tripSource === 'driver_app' && (
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                            <span className="material-symbols-outlined text-[14px]">smartphone</span>
+                            Dari Driver App
+                        </span>
+                    )}
+                    {!tripSource && (
+                        <span className="text-xs text-slate-400 font-medium">isi manual</span>
+                    )}
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[
+                        { label: 'Jam Berangkat', value: jamBerangkat, setter: setJamBerangkat, placeholder: '06:45', type: 'time', icon: 'schedule' },
+                        { label: 'Jam Pulang',    value: jamPulang,    setter: setJamPulang,    placeholder: '20:30', type: 'time', icon: 'flag' },
+                        { label: 'KM Awal',       value: kmAwal,       setter: setKmAwal,       placeholder: '302477', type: 'number', icon: 'pin_drop' },
+                        { label: 'KM Akhir',      value: kmAkhir,      setter: setKmAkhir,      placeholder: '302663', type: 'number', icon: 'location_on' },
+                    ].map(({ label, value, setter, placeholder, type, icon }) => (
+                        <div key={label} className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 px-1 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[12px] text-primary">{icon}</span>
+                                {label}
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type={type}
+                                    placeholder={placeholder}
+                                    value={value}
+                                    onChange={e => setter(e.target.value)}
+                                    className={`w-full border-none rounded-lg py-4 px-4 font-extrabold focus:ring-2 focus:ring-primary/30 transition-all
+                                        ${value
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400'
+                                            : 'bg-slate-50 dark:bg-[#1A1A1A] text-slate-900 dark:text-white'}`}
+                                />
+                                {value && (
+                                    <span className="absolute right-3 top-4 text-emerald-500 text-[10px] font-black">✓</span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                {kmAwal && kmAkhir && Number(kmAkhir) > Number(kmAwal) && (
+                    <div className="mt-4 text-sm font-bold text-primary flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px]">straighten</span>
+                        Total jarak: {(Number(kmAkhir) - Number(kmAwal)).toLocaleString('id-ID')} KM
+                    </div>
+                )}
             </section>
 
             {/* Section 2: Cost Details */}

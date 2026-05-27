@@ -62,8 +62,12 @@ def expense_to_dict(e: models.OperationalExpense) -> dict:
         "kuliAngkut": e.kuli_angkut,
         "lainLain": e.lain_lain,
         "helperName": helper,
-        "notes": notes,
-        "total": e.total
+        "notes":         notes,
+        "total":         e.total,
+        "kmAwal":        e.km_awal,
+        "kmAkhir":       e.km_akhir,
+        "jamBerangkat":  e.jam_berangkat,
+        "jamPulang":     e.jam_pulang,
     }
 
 # ==========================================
@@ -96,6 +100,81 @@ def get_finance_master_data(
         }
     }
 
+# 0. BOP AUTOFILL — ambil data trip dari driver app untuk plat tertentu hari ini
+@router.get("/bop-autofill")
+def get_bop_autofill(
+    plate: str,
+    tanggal: str = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Auto-fill data perjalanan (jam_berangkat, jam_pulang, km_awal, km_akhir)
+    dari TMSRoutePlan hari ini untuk plat nomor tertentu.
+    Kasir bisa override nilai ini di form.
+    """
+    target_date = date.today()
+    if tanggal:
+        try:
+            target_date = datetime.strptime(tanggal, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    # Cari kendaraan berdasarkan plat
+    vehicle = db.query(models.FleetVehicle).filter(
+        models.FleetVehicle.license_plate == plate
+    ).first()
+
+    if not vehicle:
+        return {"status": "success", "data": None,
+                "message": "Kendaraan tidak ditemukan di master armada"}
+
+    # Cari rute hari ini untuk kendaraan ini
+    plan = db.query(models.TMSRoutePlan).filter(
+        models.TMSRoutePlan.vehicle_id == vehicle.vehicle_id,
+        models.TMSRoutePlan.planning_date == target_date
+    ).first()
+
+    if not plan:
+        return {"status": "success", "data": None,
+                "message": "Belum ada rute terdispatch untuk armada ini hari ini"}
+
+    # Ambil nama driver & helper
+    driver_name = plan.driver.name if plan.driver else None
+    helper_name = plan.helper.name if plan.helper else None
+
+    # jam_berangkat dari start_time aktual (bukan default 06:00)
+    jam_berangkat = None
+    if plan.start_time:
+        default_06 = plan.start_time.replace(hour=6, minute=0, second=0, microsecond=0)
+        if plan.start_time != default_06:
+            jam_berangkat = plan.start_time.strftime("%H:%M")
+
+    # jam_pulang dari end_time
+    jam_pulang = plan.end_time.strftime("%H:%M") if plan.end_time else None
+
+    return {
+        "status": "success",
+        "data": {
+            "plate":          vehicle.license_plate,
+            "vehicle_type":   vehicle.type or "CDD",
+            "vehicle_id":     vehicle.vehicle_id,
+            "driver_name":    driver_name,
+            "driver_id":      plan.driver_id,
+            "helper_name":    helper_name,
+            "helper_id":      plan.helper_id,
+            "route_id":       plan.route_id,
+            "tanggal":        str(target_date),
+            # Trip data — dari driver app (bisa null kalau driver belum input)
+            "jam_berangkat":  jam_berangkat,
+            "jam_pulang":     jam_pulang,
+            "km_awal":        plan.km_awal_trip,
+            "km_akhir":       plan.km_akhir_trip,
+            "source": "driver_app" if (jam_berangkat or plan.km_awal_trip) else "belum_ada_data",
+        }
+    }
+
+
 # 1. BIKIN PENGELUARAN BARU
 @router.post("/expenses", response_model=schemas.GenericResponse)
 def create_expense(
@@ -124,9 +203,13 @@ def create_expense(
             parkir_liar=getattr(data, 'parkirLiar', 0.0) or 0.0,
             kuli_angkut=getattr(data, 'kuliAngkut', 0.0) or 0.0,
             lain_lain=getattr(data, 'lainLain', 0.0) or 0.0,
-            helper_name=getattr(data, 'helperName', ""),
-            notes=getattr(data, 'notes', ""),
-            total=getattr(data, 'total', 0.0) or 0.0
+            helper_name  = getattr(data, 'helperName', ""),
+            notes        = getattr(data, 'notes', ""),
+            total        = getattr(data, 'total', 0.0) or 0.0,
+            km_awal      = getattr(data, 'kmAwal', None) or None,
+            km_akhir     = getattr(data, 'kmAkhir', None) or None,
+            jam_berangkat= getattr(data, 'jamBerangkat', None) or None,
+            jam_pulang   = getattr(data, 'jamPulang', None) or None,
         )
         db.add(new_expense)
         db.commit()
@@ -166,9 +249,13 @@ def update_expense(
         expense.parkir_liar = getattr(data, 'parkirLiar', 0.0) or 0.0
         expense.kuli_angkut = getattr(data, 'kuliAngkut', 0.0) or 0.0
         expense.lain_lain = getattr(data, 'lainLain', 0.0) or 0.0
-        expense.helper_name = getattr(data, 'helperName', "")
-        expense.notes = getattr(data, 'notes', "")
-        expense.total = getattr(data, 'total', 0.0) or 0.0
+        expense.helper_name   = getattr(data, 'helperName', "")
+        expense.notes         = getattr(data, 'notes', "")
+        expense.total         = getattr(data, 'total', 0.0) or 0.0
+        expense.km_awal       = getattr(data, 'kmAwal', None) or None
+        expense.km_akhir      = getattr(data, 'kmAkhir', None) or None
+        expense.jam_berangkat = getattr(data, 'jamBerangkat', None) or None
+        expense.jam_pulang    = getattr(data, 'jamPulang', None) or None
         
         db.commit()
         return {"status": "success", "message": "Biaya operasional berhasil diupdate."}

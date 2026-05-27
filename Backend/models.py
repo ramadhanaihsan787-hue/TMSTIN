@@ -173,6 +173,10 @@ class TMSRoutePlan(Base):
     # Menggantikan route_geometries/*.json yang tidak pernah ditulis
     route_geometry = Column(Text, nullable=True)
 
+    # Data odometer dari driver app (diisi saat trip start/end)
+    km_awal_trip  = Column(Integer, nullable=True)
+    km_akhir_trip = Column(Integer, nullable=True)
+
 class TMSRouteLine(Base):
     __tablename__ = "tms_route_line"
     __table_args__ = {'extend_existing': True}
@@ -255,6 +259,11 @@ class SystemSettings(Base):
     alert_max_temp_celsius = Column(Float, default=4.0)
     alert_delay_mins = Column(Integer, default=30)
     
+    # Geofence jembatan timbang — untuk auto-lock jam pulang driver
+    jembatan_timbang_lat      = Column(Float, nullable=True)
+    jembatan_timbang_lon      = Column(Float, nullable=True)
+    jembatan_timbang_radius_m = Column(Integer, default=100)
+
     alert_channel_dashboard = Column(Boolean, default=True)
     alert_channel_email = Column(Boolean, default=True)
     alert_channel_whatsapp = Column(Boolean, default=False)
@@ -285,7 +294,13 @@ class OperationalExpense(Base):
     helper_name = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
     total = Column(Float, default=0.0)
-    
+
+    # Data perjalanan — auto-fill dari driver app, bisa diedit kasir
+    km_awal       = Column(Integer, nullable=True)
+    km_akhir      = Column(Integer, nullable=True)
+    jam_berangkat = Column(String(10), nullable=True)   # "06:45"
+    jam_pulang    = Column(String(10), nullable=True)   # "20:30"
+
     created_at = Column(DateTime, default=datetime.datetime.now)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
 

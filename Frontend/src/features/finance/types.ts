@@ -17,4 +17,8 @@ export interface ExpenseEntry {
     helperName: string;
     notes: string;
     total: number;
+    jamBerangkat?: string;
+    jamPulang?:    string;
+    kmAwal?:       number;
+    kmAkhir?:      number;
 }

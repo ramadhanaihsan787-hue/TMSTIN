@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import { useExpenses } from './useExpenses';
+import { api } from '../../../shared/services/apiClient';
 import type { ExpenseEntry } from '../types';
 
 export function useKasirDashboardState() {
@@ -22,6 +23,13 @@ export function useKasirDashboardState() {
     const [parkirLiar, setParkirLiar] = useState('');
     const [kuliAngkut, setKuliAngkut] = useState('');
     const [lainLain, setLainLain] = useState('');
+
+    // Data perjalanan — auto-fill dari driver app, editable kasir
+    const [jamBerangkat, setJamBerangkat] = useState('');
+    const [jamPulang,    setJamPulang]    = useState('');
+    const [kmAwal,       setKmAwal]       = useState('');
+    const [kmAkhir,      setKmAkhir]      = useState('');
+    const [tripSource,   setTripSource]   = useState<'driver_app' | 'manual' | null>(null);
 
     const [showToast, setShowToast] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,6 +57,12 @@ export function useKasirDashboardState() {
         fetchMasterData();
     }, []);
 
+    // Auto-fill saat pilihan armada berubah
+    useEffect(() => {
+        const plate = isOncall ? oncallPlate : (fleets[selectedFleetIdx]?.plate || '');
+        if (plate && !editingId) autoFillTripData(plate);
+    }, [selectedFleetIdx, isOncall, oncallPlate, fleets.length]);   // eslint-disable-line
+
     const resetForm = () => {
         setBbm(''); setTol(''); setParkir(''); setParkirLiar('');
         setKuliAngkut(''); setLainLain('');
@@ -58,6 +72,35 @@ export function useKasirDashboardState() {
         setSelectedFleetIdx(0);
         setSelectedDriver(drivers[0]?.name || '');
         setSelectedHelper('');
+        setJamBerangkat(''); setJamPulang('');
+        setKmAwal(''); setKmAkhir('');
+        setTripSource(null);
+    };
+
+    // Auto-fill data perjalanan dari driver app
+    const autoFillTripData = async (plate: string) => {
+        if (!plate) return;
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const res = await api.get(`/api/finance/bop-autofill?plate=${encodeURIComponent(plate)}&tanggal=${today}`);
+            const data = res.data?.data;
+            if (!data) return;
+
+            // Auto-fill driver & helper kalau ada dari rute
+            if (data.driver_name && drivers.some(d => d.name === data.driver_name)) {
+                setSelectedDriver(data.driver_name);
+            }
+            if (data.helper_name && drivers.some(d => d.name === data.helper_name)) {
+                setSelectedHelper(data.helper_name);
+            }
+
+            // Auto-fill jam & km — hanya kalau ada data dari driver app
+            if (data.jam_berangkat) setJamBerangkat(data.jam_berangkat);
+            if (data.jam_pulang)    setJamPulang(data.jam_pulang);
+            if (data.km_awal)       setKmAwal(String(data.km_awal));
+            if (data.km_akhir)      setKmAkhir(String(data.km_akhir));
+            setTripSource(data.source === 'driver_app' ? 'driver_app' : 'manual');
+        } catch { /* silent fail */ }
     };
 
     const handleSubmit = async () => {
@@ -83,7 +126,12 @@ export function useKasirDashboardState() {
             isOncall,
             bbm: n(bbm), tol: n(tol), parkir: n(parkir),
             parkirLiar: n(parkirLiar), kuliAngkut: n(kuliAngkut), lainLain: n(lainLain),
-            helperName: currentHelper, notes: '', total
+            helperName: currentHelper, notes: '', total,
+            // Data perjalanan dari driver app / manual kasir
+            jamBerangkat: jamBerangkat || undefined,
+            jamPulang:    jamPulang    || undefined,
+            kmAwal:       kmAwal       ? Number(kmAwal)  : undefined,
+            kmAkhir:      kmAkhir      ? Number(kmAkhir) : undefined,
         };
 
         const success = await saveEntry(payload);
@@ -200,6 +248,8 @@ export function useKasirDashboardState() {
         parsedPreview, showImportToast, setShowImportToast, importToastMsg,
         currentPlate, currentDriver, currentHelper, total, resetForm, handleSubmit,
         handleDownloadTemplate, handleImportClick, handleExcelUpload, handleConfirmImport,
-        handleCancelImport, handleExportExcel, handleEdit, handleDelete, todayEntries
+        handleCancelImport, handleExportExcel, handleEdit, handleDelete, todayEntries,
+        jamBerangkat, setJamBerangkat, jamPulang, setJamPulang,
+        kmAwal, setKmAwal, kmAkhir, setKmAkhir, tripSource
     };
 }

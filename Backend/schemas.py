@@ -380,6 +380,10 @@ class SystemSettingsUpdate(BaseModel):
     alert_channel_dashboard: bool = True
     alert_channel_email: bool = True
     alert_channel_whatsapp: bool = False
+    # Jembatan timbang geofence (untuk auto-lock jam pulang driver)
+    jembatan_timbang_lat:      Optional[float] = None
+    jembatan_timbang_lon:      Optional[float] = None
+    jembatan_timbang_radius_m: int = 100
 
 class SettingsResponse(BaseModel):
     status: str = "success"
@@ -570,8 +574,13 @@ class ExpenseCreate(BaseModel):
     kuliAngkut: float
     lainLain: float
     helperName: Optional[str] = ""
-    notes: Optional[str] = ""
-    total: float
+    notes:       Optional[str] = ""
+    total:       float
+    # Data perjalanan dari driver app
+    kmAwal:       Optional[int] = None
+    kmAkhir:      Optional[int] = None
+    jamBerangkat: Optional[str] = None
+    jamPulang:    Optional[str] = None
 
 # 🌟 FIX CTO: Kita bikin skema khusus buat nampilin data di tabel Frontend
 class ExpenseResponse(BaseModel):

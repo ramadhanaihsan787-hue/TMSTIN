@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../../shared/components/Header';
 import { useDriverappFlow } from '../hooks/useDriverappFlow';
+import { driverappService } from '../services/driverappService';
+import { toast } from 'sonner';
 
 const DriverDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -107,9 +109,18 @@ const DriverDashboard: React.FC = () => {
                     </div>
 
                     <button 
-                        onClick={() => {
-                            localStorage.setItem('driver_start_km', startKm); 
-                            startRoute(); 
+                        onClick={async () => {
+                            if (!startKm) { toast.error('Isi odometer awal dahulu!'); return; }
+                            localStorage.setItem('driver_start_km', startKm);
+                            if (tripData?.route_id) {
+                                try {
+                                    await driverappService.startTrip(tripData.route_id, Number(startKm));
+                                    toast.success(`Perjalanan dimulai — KM ${Number(startKm).toLocaleString('id-ID')}`);
+                                } catch {
+                                    toast.warning('Gagal sync ke server, data tersimpan lokal');
+                                }
+                            }
+                            startRoute();
                             navigate('/driver/routes');
                         }}
                         disabled={!startKm}

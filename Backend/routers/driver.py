@@ -1,4 +1,5 @@
 # Backend/routers/driver.py
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -8,6 +9,7 @@ import shutil
 import uuid
 import io
 import logging
+from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from services.epod_service import submit_epod_with_ai
@@ -379,6 +381,111 @@ async def submit_epod(
         db.rollback()
         logger.error(f"🚨 [UPLOAD EPOD] Error di line_id {line_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Terjadi kesalahan internal saat menyimpan POD. Silakan hubungi admin.")
+
+# ==========================================
+# 3b. START TRIP & END TRIP (dari Driver App)
+# ==========================================
+
+class TripStartRequest(BaseModel):
+    route_id: str
+    km_awal: int
+
+class TripEndRequest(BaseModel):
+    route_id: str
+    km_akhir: int
+    gps_lat: float = 0.0
+    gps_lon: float = 0.0
+
+@router.post("/trip/start")
+def start_trip(
+    data: TripStartRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("driver"))
+):
+    """Driver menekan Mulai Perjalanan — rekam jam berangkat & KM awal."""
+    plan = db.query(models.TMSRoutePlan).filter(
+        models.TMSRoutePlan.route_id == data.route_id
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Rute tidak ditemukan")
+
+    now = datetime.now()
+    plan.start_time    = now
+    plan.km_awal_trip  = data.km_awal
+
+    # Sync KM ke master armada
+    if plan.vehicle:
+        plan.vehicle.current_km = data.km_awal
+
+    db.commit()
+    logger.info(f"🚀 Trip START: {data.route_id} | KM awal={data.km_awal} | {now.strftime('%H:%M')}")
+    return {
+        "status": "success",
+        "message": f"Perjalanan dimulai pukul {now.strftime('%H:%M')}",
+        "jam_berangkat": now.strftime("%H:%M"),
+        "km_awal": data.km_awal,
+    }
+
+
+@router.post("/trip/end")
+def end_trip(
+    data: TripEndRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("driver"))
+):
+    """Driver menekan Selesai Perjalanan — rekam jam pulang & KM akhir.
+    Jika GPS berada dalam radius jembatan timbang, jam dikunci otomatis."""
+    plan = db.query(models.TMSRoutePlan).filter(
+        models.TMSRoutePlan.route_id == data.route_id
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Rute tidak ditemukan")
+
+    now = datetime.now()
+
+    # Geofence jembatan timbang — lock jam pulang kalau driver ada di sana
+    geo_locked = False
+    settings_db = db.query(models.SystemSettings).first()
+    if (data.gps_lat != 0.0 and data.gps_lon != 0.0
+            and settings_db
+            and settings_db.jembatan_timbang_lat
+            and settings_db.jembatan_timbang_lon):
+        dist_m = calculate_haversine(
+            data.gps_lat, data.gps_lon,
+            settings_db.jembatan_timbang_lat,
+            settings_db.jembatan_timbang_lon
+        )
+        radius = settings_db.jembatan_timbang_radius_m or 100
+        if dist_m <= radius:
+            geo_locked = True
+            logger.info(
+                f"📍 Geofence jembatan timbang: {data.route_id} "
+                f"dalam radius {dist_m:.0f}m — jam pulang dikunci"
+            )
+
+    plan.end_time      = now
+    plan.km_akhir_trip = data.km_akhir
+
+    # Sync KM akhir ke master armada
+    if plan.vehicle:
+        plan.vehicle.current_km = data.km_akhir
+
+    db.commit()
+    logger.info(
+        f"🏁 Trip END: {data.route_id} | KM akhir={data.km_akhir} "
+        f"| {now.strftime('%H:%M')} | geo_lock={geo_locked}"
+    )
+    return {
+        "status": "success",
+        "message": (
+            f"Perjalanan selesai pukul {now.strftime('%H:%M')} "
+            f"{'(dikunci di jembatan timbang)' if geo_locked else ''}"
+        ).strip(),
+        "jam_pulang":  now.strftime("%H:%M"),
+        "km_akhir":    data.km_akhir,
+        "geo_locked":  geo_locked,
+    }
+
 
 # ==========================================
 # 4. AMBIL DAFTAR SUPIR & HELPER (UNTUK ADMIN DISTRIBUSI)

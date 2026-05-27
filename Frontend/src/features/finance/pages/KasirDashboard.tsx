@@ -64,7 +64,16 @@ export default function KasirDashboard() {
         handleExportExcel,
         handleEdit,
         handleDelete,
-        todayEntries
+        todayEntries,
+        jamBerangkat,
+        setJamBerangkat,
+        jamPulang,
+        setJamPulang,
+        kmAwal,
+        setKmAwal,
+        kmAkhir,
+        setKmAkhir,
+        tripSource
     } = useKasirDashboardState();
 
     return (
@@ -191,6 +200,15 @@ export default function KasirDashboard() {
                         setKuliAngkut={setKuliAngkut}
                         lainLain={lainLain}
                         setLainLain={setLainLain}
+                        jamBerangkat={jamBerangkat}
+                        setJamBerangkat={setJamBerangkat}
+                        jamPulang={jamPulang}
+                        setJamPulang={setJamPulang}
+                        kmAwal={kmAwal}
+                        setKmAwal={setKmAwal}
+                        kmAkhir={kmAkhir}
+                        setKmAkhir={setKmAkhir}
+                        tripSource={tripSource}
                     />
 
                     {/* Right Column: Cost Summary Sticky Panel */}

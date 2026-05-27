@@ -1,23 +1,4 @@
 # Backend/core/config.py
-"""
-Configuration module — ENV defaults & app-level constants.
-
-[MR-2] ARSITEKTUR SETTINGS:
-- Settings class (ini) = sumber DEFAULT values saat DB belum ada / belum di-seed.
-- Sumber kebenaran runtime = DB (tabel system_settings, baris id=1).
-- Semua consumer wajib pakai get_settings() dari dependencies.py,
-  bukan import 'settings' dari sini langsung.
-
-FIELD YANG TIDAK ADA DI DB (tetap ENV-driven, tidak pernah berubah runtime):
-  DATABASE_URL, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES,
-  APP_NAME, APP_VERSION, APP_DESCRIPTION, DEBUG, UPLOAD_DIR, EPOD_DIR,
-  GEOMETRY_DIR, TOMTOM_API_KEY, traffic_validation_enabled
-
-FIELD YANG ADA DI DB (ENV hanya dipakai sebagai seed awal):
-  depo_lat, depo_lon, vrp_*, cost_*, geofence_radius_meters,
-  dwell_time_mins, anomaly_tolerance_percent, api_*, sync_interval_sec,
-  alert_*
-"""
 import os
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,8 +16,6 @@ class Settings(BaseSettings):
     # ==========================================
     DATABASE_URL: str
     SECRET_KEY: str
-    # [QW-1] Kunci berbeda untuk refresh token — WAJIB diisi di .env
-    # Berbeda dari SECRET_KEY agar token jenis berbeda tidak bisa saling dipakai
     REFRESH_SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -100,13 +79,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
-# ENV-only instance — dipakai HANYA oleh:
-# 1. dependencies.py untuk bootstrap cache pertama kali
-# 2. main.py untuk APP_NAME, VERSION, dll (infra-level fields)
-# 3. cron_service.py startup (sebelum DB tersedia)
-#
-# JANGAN import 'env_settings' langsung di router/service lain.
-# Pakai get_settings() dari dependencies.py.
 env_settings = Settings()
 
 # Create directories

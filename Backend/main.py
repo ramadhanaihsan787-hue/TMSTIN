@@ -19,12 +19,6 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 from core.config import env_settings as settings  # infra-only fields (APP_NAME, UPLOAD_DIR, dll)
 from core.exceptions import setup_exception_handlers
 
-# [QW-9] Database: Base.metadata.create_all() DIHAPUS dari sini.
-# Schema dikelola SEPENUHNYA oleh Alembic.
-# Sebelum start server pertama kali / deploy baru, WAJIB jalankan:
-#   alembic upgrade head
-# Untuk Docker, tambahkan di entrypoint.sh:
-#   alembic upgrade head && uvicorn main:app ...
 from database import engine  # noqa: F401 — engine tetap diimport untuk koneksi pool
 
 from services.cron_service import start_system_scheduler
