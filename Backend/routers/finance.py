@@ -9,6 +9,12 @@ import logging
 import models
 import schemas
 from dependencies import get_db, get_current_user, require_role
+import io
+import calendar
+from fastapi.responses import StreamingResponse
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +178,344 @@ def get_bop_autofill(
             "km_akhir":       plan.km_akhir_trip,
             "source": "driver_app" if (jam_berangkat or plan.km_awal_trip) else "belum_ada_data",
         }
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# BOP EXPORT — generate Excel BOP format persis seperti template JAPFA
+# ─────────────────────────────────────────────────────────────────────
+@router.get("/bop-export")
+def export_bop(
+    month: int = None,
+    year:  int = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Generate file Excel BOP format resmi JAPFA WH Cikupa."""
+    today = datetime.now()
+    m = month or today.month
+    y = year  or today.year
+
+    # Ambil semua pengeluaran bulan ini
+    from_date = date(y, m, 1)
+    to_date   = date(y, m, calendar.monthrange(y, m)[1])
+
+    expenses = db.query(models.OperationalExpense).filter(
+        models.OperationalExpense.date >= from_date,
+        models.OperationalExpense.date <= to_date
+    ).order_by(models.OperationalExpense.date).all()
+
+    # Nama bulan Indonesia
+    BULAN = ['', 'JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI',
+             'JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER']
+
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{m:02d}"
+
+    # ── Style helpers ─────────────────────────────────────────────────
+    def hdr_font(bold=True, size=9):
+        return Font(name='Calibri', bold=bold, size=size)
+    def thin_border():
+        t = Side(style='thin')
+        return Border(left=t, right=t, top=t, bottom=t)
+    def fill(hex_color):
+        return PatternFill("solid", fgColor=hex_color)
+    def cell(row, col, val="", bold=False, center=True, bg=None, font_size=9):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font = Font(name='Calibri', bold=bold, size=font_size)
+        if center:
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        else:
+            c.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+        c.border = thin_border()
+        if bg:
+            c.fill = fill(bg)
+        return c
+
+    # ── Row 1: Judul ──────────────────────────────────────────────────
+    ws.merge_cells('A1:T1')
+    t = ws['A1']
+    t.value = "REKAPITULASI BIAYA OPERASIONAL PT SO GOOD FOOD (FRESH) WH. CIKUPA"
+    t.font = Font(name='Calibri', bold=True, size=11)
+    t.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 22
+
+    # ── Row 2: Periode ────────────────────────────────────────────────
+    ws.merge_cells('A2:T2')
+    p = ws['A2']
+    p.value = f"PERIODE : {m:02d} {BULAN[m]} {y}"
+    p.font = Font(name='Calibri', bold=True, size=10)
+    p.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[2].height = 18
+
+    # ── Row 3-5: Header ───────────────────────────────────────────────
+    HDR_BG = "BDD7EE"  # biru muda
+    headers_r3 = [
+        (1, "NO."), (2, "NAMA
+PENGGUNA"), (3, "HELFER"), (4, "NO. POLISI"),
+        (5, "TANGGAL
+PENGGUNAAN"), (6, "JAM
+BRGKT"), (7, "JAM
+PLG"),
+        (8, "KM
+AWAL"), (9, "KM
+AKHIR"),
+    ]
+    for col, txt in headers_r3:
+        ws.merge_cells(start_row=3, start_column=col, end_row=5, end_column=col)
+        cell(3, col, txt, bold=True, bg=HDR_BG)
+
+    # RINCIAN BIAYA — merge row 3, split row 4-5
+    ws.merge_cells(start_row=3, start_column=10, end_row=3, end_column=18)
+    cell(3, 10, "RINCIAN BIAYA", bold=True, bg=HDR_BG)
+
+    biaya_r4 = ["BBM (Rp.)", "TOL", "PARKIR", "PARKIR
+LIAR", "KULI /
+LAIN-LAIN",
+                "NAMA HELPER
+HARIAN", "HELPER
+HARIAN", "TOTAL
+BIAYA", "RASIO
+BBM/LITER"]
+    for i, txt in enumerate(biaya_r4):
+        col = 10 + i
+        ws.merge_cells(start_row=4, start_column=col, end_row=5, end_column=col)
+        cell(4, col, txt, bold=True, bg=HDR_BG)
+
+    ws.row_dimensions[3].height = 32
+    ws.row_dimensions[4].height = 28
+    ws.row_dimensions[5].height = 12
+
+    # ── Data rows ─────────────────────────────────────────────────────
+    DATA_START = 6
+    for idx, e in enumerate(expenses, start=1):
+        r = DATA_START + idx - 1
+        driver_name = ""
+        helper_name = e.helper_name or ""
+        if e.driver_id:
+            drv = db.query(models.HRDriver).filter(
+                models.HRDriver.driver_id == e.driver_id).first()
+            if drv: driver_name = drv.name
+        plate = ""
+        if e.vehicle_id:
+            v = db.query(models.FleetVehicle).filter(
+                models.FleetVehicle.vehicle_id == e.vehicle_id).first()
+            if v: plate = v.license_plate
+
+        km_awal  = e.km_awal  or ""
+        km_akhir = e.km_akhir or ""
+        rasio    = ""
+        if e.km_awal and e.km_akhir and e.bbm and e.bbm > 0:
+            jarak = e.km_akhir - e.km_awal
+            liter = round(e.bbm / 12500, 1)  # estimasi: BBM/harga per liter
+            if liter > 0:
+                rasio = round(jarak / liter, 1)
+
+        vals = [idx, driver_name, helper_name, plate,
+                e.date.strftime("%d/%m/%Y") if e.date else "",
+                e.jam_berangkat or "", e.jam_pulang or "",
+                km_awal, km_akhir,
+                e.bbm or 0, e.tol or 0, e.parkir or 0, e.parkir_liar or 0,
+                (e.kuli_angkut or 0) + (e.lain_lain or 0),
+                helper_name, e.lain_lain or 0,
+                e.total or 0, rasio]
+        for ci, v in enumerate(vals, start=1):
+            c2 = cell(r, ci, v, center=(ci != 2 and ci != 3))
+            if ci >= 10 and ci <= 18 and isinstance(v, (int, float)) and v:
+                c2.number_format = '#,##0'
+
+    # ── Grand Total ───────────────────────────────────────────────────
+    total_row = DATA_START + len(expenses)
+    ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=9)
+    cell(total_row, 1, "GRAND TOTAL", bold=True, bg="FFE699")
+    total_cols = {10: 'bbm', 11: 'tol', 12: 'parkir', 13: 'parkir_liar',
+                  14: None, 15: None, 16: 'lain_lain', 17: 'total'}
+    for col, field in total_cols.items():
+        if field:
+            total = sum(getattr(e, field) or 0 for e in expenses)
+        elif col == 14:
+            total = sum((e.kuli_angkut or 0) + (e.lain_lain or 0) for e in expenses)
+        else:
+            continue
+        c2 = cell(total_row, col, total, bold=True, bg="FFE699")
+        c2.number_format = '#,##0'
+
+    # ── Tanda tangan ─────────────────────────────────────────────────
+    sign_row = total_row + 3
+    ws.merge_cells(start_row=sign_row, start_column=1,  end_row=sign_row, end_column=5)
+    ws.merge_cells(start_row=sign_row, start_column=8,  end_row=sign_row, end_column=13)
+    ws.merge_cells(start_row=sign_row, start_column=15, end_row=sign_row, end_column=18)
+    ws[f'A{sign_row}'] = "Dibuat oleh,"
+    ws[f'H{sign_row}'] = "Mengetahui,"
+    ws[f'O{sign_row}'] = "Disetujui"
+    for r2 in [ws[f'A{sign_row}'], ws[f'H{sign_row}'], ws[f'O{sign_row}']]:
+        r2.font = Font(name='Calibri', bold=True, size=9)
+
+    # ── Column widths ─────────────────────────────────────────────────
+    widths = [4, 22, 18, 13, 12, 7, 7, 8, 8, 12, 10, 10, 10, 12, 18, 12, 12, 8]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # ── Stream ke response ────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    fname = f"BOP_{y}_{m:02d}_{BULAN[m]}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"}
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# BOP IMPORT — parse Excel BOP (header-based detection, handle 2 format)
+# ─────────────────────────────────────────────────────────────────────
+@router.post("/bop-import-parse")
+async def parse_bop_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Parse file Excel BOP yang diupload kasir.
+    Mendukung dua format: lama (26 kolom) dan baru (21 kolom).
+    Return preview JSON — belum disimpan ke DB.
+    """
+    content = await file.read()
+    buf = io.BytesIO(content)
+
+    try:
+        wb = load_workbook(buf, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"File Excel tidak valid: {e}")
+
+    # ── Header detection ─────────────────────────────────────────────
+    HEADER_MAP = {
+        "NAMA PENGGUNA": "driver",
+        "NAMA
+PENGGUNA": "driver",
+        "HELFER": "helper",
+        "HELPER": "helper",
+        "NO. POLISI": "plate",
+        "NO.POLISI": "plate",
+        "BBM": "bbm",
+        "TOL": "tol",
+        "PARKIR": "parkir",
+        "PARKIR LIAR": "parkir_liar",
+        "PARKIR
+LIAR": "parkir_liar",
+        "KULI / LAIN-LAIN": "kuli",
+        "KULI /
+LAIN-LAIN": "kuli",
+        "KULI ANGKUT": "kuli",
+        "HELPER HARIAN": "helper_harian",
+        "HELPER
+HARIAN": "helper_harian",
+        "TOTAL BIAYA": "total",
+        "TOTAL
+BIAYA": "total",
+        "JAM BRGKT": "jam_berangkat",
+        "JAM
+BRGKT": "jam_berangkat",
+        "JAM PLG": "jam_pulang",
+        "JAM
+PLG": "jam_pulang",
+        "KM AWAL": "km_awal",
+        "KM
+AWAL": "km_awal",
+        "KM AKHIR": "km_akhir",
+        "KM
+AKHIR": "km_akhir",
+        "TANGGAL PENGGUNAAN": "tanggal",
+        "TANGGAL
+PENGGUNAAN": "tanggal",
+        "NO.": "no",
+    }
+
+    col_map = {}
+    data_start_row = None
+
+    # Scan baris 1-8 untuk cari header
+    for row_idx in range(1, 9):
+        for col_idx in range(1, ws.max_column + 1):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val is None: continue
+            key = str(val).strip().upper()
+            for hdr, field in HEADER_MAP.items():
+                if key == hdr.upper():
+                    col_map[field] = col_idx
+                    data_start_row = row_idx + 1  # data di bawah header
+
+    if not col_map or not data_start_row:
+        raise HTTPException(status_code=422, detail="Format Excel tidak dikenali. Pastikan header ada.")
+
+    # ── Parse data rows ───────────────────────────────────────────────
+    results = []
+    warnings = []
+
+    for row_idx in range(data_start_row, ws.max_row + 1):
+        def g(field):
+            if field not in col_map: return None
+            return ws.cell(row=row_idx, column=col_map[field]).value
+
+        no_val = g('no')
+        if no_val is None: continue
+        try:
+            no_int = int(str(no_val).strip())
+        except:
+            continue  # baris GRAND TOTAL atau tanda tangan
+
+        plate = str(g('plate') or "").strip().upper()
+        driver = str(g('driver') or "").strip()
+        helper = str(g('helper') or "").strip()
+
+        def to_float(v):
+            if v is None: return 0.0
+            try: return float(str(v).replace(',', '').replace('Rp', '').strip())
+            except: return 0.0
+
+        bbm         = to_float(g('bbm'))
+        tol         = to_float(g('tol'))
+        parkir      = to_float(g('parkir'))
+        parkir_liar = to_float(g('parkir_liar'))
+        kuli        = to_float(g('kuli'))
+        helper_h    = to_float(g('helper_harian'))
+        total       = to_float(g('total')) or bbm + tol + parkir + parkir_liar + kuli + helper_h
+
+        # Validasi plat ada di master fleet
+        is_valid = db.query(models.FleetVehicle).filter(
+            models.FleetVehicle.license_plate == plate
+        ).first() is not None
+        if plate and not is_valid:
+            warnings.append(f"Baris {no_int}: plat '{plate}' tidak ditemukan di master armada")
+
+        results.append({
+            "no": no_int,
+            "plate": plate,
+            "driver": driver,
+            "helper": helper,
+            "tanggal": str(g('tanggal') or date.today()),
+            "jamBerangkat": str(g('jam_berangkat') or ""),
+            "jamPulang": str(g('jam_pulang') or ""),
+            "kmAwal": int(g('km_awal')) if g('km_awal') else None,
+            "kmAkhir": int(g('km_akhir')) if g('km_akhir') else None,
+            "bbm": bbm, "tol": tol, "parkir": parkir,
+            "parkirLiar": parkir_liar, "kuliAngkut": kuli,
+            "lainLain": helper_h, "helperName": helper,
+            "total": total,
+            "isValid": is_valid or not plate,
+        })
+
+    return {
+        "status": "success",
+        "rows": len(results),
+        "warnings": warnings,
+        "data": results,
     }
 
 

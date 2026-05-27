@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import { useExpenses } from './useExpenses';
 import { api } from '../../../shared/services/apiClient';
+import { financeService } from '../services/financeService';
 import type { ExpenseEntry } from '../types';
 
 export function useKasirDashboardState() {
@@ -143,8 +144,30 @@ export function useKasirDashboardState() {
         }
     };
 
-    const handleDownloadTemplate = () => {
-        toast.info("Mengunduh Template Excel...");
+    const handleDownloadTemplate = async () => {
+        try {
+            toast.info("Mempersiapkan template BOP...");
+            const today = new Date();
+            const month = today.getMonth() + 1;
+            const year  = today.getFullYear();
+            // Download bulan ini sebagai template berisi data aktual
+            const res = await api.get(
+                `/api/finance/bop-export?month=${month}&year=${year}`,
+                { responseType: 'blob' }
+            );
+            const blob = new Blob([res.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const url  = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href     = url;
+            link.download = `BOP_${year}_${String(month).padStart(2,'0')}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success("Template BOP berhasil diunduh!");
+        } catch {
+            toast.error("Gagal mengunduh template BOP");
+        }
     };
 
     const handleImportClick = () => {
@@ -158,24 +181,55 @@ export function useKasirDashboardState() {
         setIsUploading(true);
         if (fileInputRef.current) fileInputRef.current.value = '';
 
-        setTimeout(() => {
-            setIsUploading(false);
-            const dummyEntry: ExpenseEntry = {
-                time: '08:45',
-                date: new Date().toISOString().split('T')[0],
-                plate: fleets[0]?.plate || 'B 9514 JXS',
-                vehicleType: fleets[0]?.type || 'CDD',
-                driver: drivers[0]?.name || 'Supir Import',
-                isOncall: false,
-                bbm: 450000, tol: 65000, parkir: 20000,
-                parkirLiar: 0, kuliAngkut: 25000, lainLain: 0,
-                helperName: 'Helper Import', notes: 'Diimpor dari Excel', total: 560000
-            };
-            setParsedPreview([dummyEntry]);
-            setImportToastMsg({ title: 'Excel Siap', desc: 'Satu file excel berhasil diurai' });
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/api/finance/bop-import-parse', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            const parsed = res.data;
+
+            // Konversi response ke ExpenseEntry[]
+            const entries: ExpenseEntry[] = (parsed.data || []).map((row: any) => {
+                const fleet = fleets.find(f => f.plate === row.plate);
+                return {
+                    time: row.jamBerangkat || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                    date: row.tanggal || new Date().toISOString().split('T')[0],
+                    plate: row.plate,
+                    vehicleType: fleet?.type || 'Unknown',
+                    driver: row.driver,
+                    isOncall: !fleet,
+                    bbm: row.bbm || 0,
+                    tol: row.tol || 0,
+                    parkir: row.parkir || 0,
+                    parkirLiar: row.parkirLiar || 0,
+                    kuliAngkut: row.kuliAngkut || 0,
+                    lainLain: row.lainLain || 0,
+                    helperName: row.helperName || '',
+                    notes: 'Diimpor dari Excel',
+                    total: row.total || 0,
+                    jamBerangkat: row.jamBerangkat || undefined,
+                    jamPulang: row.jamPulang || undefined,
+                    kmAwal: row.kmAwal || undefined,
+                    kmAkhir: row.kmAkhir || undefined,
+                };
+            });
+
+            setParsedPreview(entries);
+            const warnTxt = parsed.warnings?.length
+                ? ` (${parsed.warnings.length} peringatan)`
+                : '';
+            setImportToastMsg({
+                title: 'Excel Berhasil Dibaca',
+                desc: `${entries.length} baris ditemukan${warnTxt}`
+            });
             setShowImportToast(true);
-            setTimeout(() => setShowImportToast(false), 3000);
-        }, 2500);
+            setTimeout(() => setShowImportToast(false), 4000);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || 'Gagal membaca file Excel');
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const handleConfirmImport = async () => {
@@ -194,8 +248,29 @@ export function useKasirDashboardState() {
         setParsedPreview([]);
     };
 
-    const handleExportExcel = () => {
-        toast.info("Mengekspor data ke Excel...");
+    const handleExportExcel = async () => {
+        try {
+            toast.info("Menyiapkan file BOP Excel...");
+            const today = new Date();
+            const month = today.getMonth() + 1;
+            const year  = today.getFullYear();
+            const res = await api.get(
+                `/api/finance/bop-export?month=${month}&year=${year}`,
+                { responseType: 'blob' }
+            );
+            const blob = new Blob([res.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const url  = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href     = url;
+            link.download = `BOP_${year}_${String(month).padStart(2,'0')}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success("File BOP berhasil diunduh!");
+        } catch {
+            toast.error("Gagal mengekspor BOP Excel");
+        }
     };
 
     const handleEdit = (entry: ExpenseEntry) => {

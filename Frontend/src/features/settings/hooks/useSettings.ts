@@ -15,12 +15,16 @@ const defaultSettings: SettingsFormData = {
     cost_overtime_rate: 25000,
     depo_lat: -6.207356,
     depo_lon: 106.479163,
-    api_tomtom_key: "xUy50YsjmbRexLalxX3ThDpmC1lOzElP",
+    api_tomtom_key: import.meta.env.VITE_TOMTOM_API_KEY || "",  // dari .env
     api_gps_webhook: "",
     api_temp_sensor: "",
     sync_interval_sec: 60,
     alert_max_temp_celsius: 4.0,
-    alert_delay_mins: 30
+    alert_delay_mins: 30,
+    // Jembatan timbang WH Cikupa (koordinat default)
+    jembatan_timbang_lat:      -6.206353,
+    jembatan_timbang_lon:      106.480681,
+    jembatan_timbang_radius_m: 30,
 };
 
 export const useSettings = () => {

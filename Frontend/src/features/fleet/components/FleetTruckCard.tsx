@@ -11,17 +11,26 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
     const {
         id,
         licensePlate,
-        driverName = "Maria Chen",
-        routeName = "Yard A → Yard B",
-        cargoType = "Frozen Chicken",
-        eta = "04:20 PM",
-        speedKmH = 43,
-        batteryPct = 62,
-        currentTemp = -18.2,
+        driverName,          // dari backend dispatch hari ini
+        helperName,          // dari backend dispatch hari ini
+        etaLast,             // ETA stop terakhir dari routing
+        totalStopsToday,     // jumlah stop hari ini
+        speedKmH = 0,
+        batteryPct = 0,
+        currentTemp = -18.0,
         setPointTemp = -18,
         tempStatus = "Healthy",
-        sparklineData = [20, 25, 15, 20, 10, 15]
+        sparklineData = [15, 15, 15, 15, 15, 15],
+        status,
+        currentLoad = 0,
+        capacity = 0,
     } = truck;
+
+    // Field yang belum ada datanya — kosongkan, jangan dummy
+    const displayDriver = driverName || '—';
+    const displayEta    = etaLast    || '—';
+    const displayStops  = totalStopsToday != null ? `${totalStopsToday} stop` : '—';
+    const loadPct       = capacity > 0 ? Math.round((currentLoad / capacity) * 100) : 0;
 
     // Determine status badge classes
     let badgeBg = "bg-app-green-bg text-app-green border-app-green/20";
@@ -144,35 +153,39 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
                             <span className="material-symbols-outlined text-sm">person</span>
                             Driver
                         </span>
-                        <span className="text-slate-800 dark:text-white font-medium text-right truncate max-w-[110px]" title={driverName}>{driverName}</span>
+                        <span className={`font-medium text-right truncate max-w-[110px] ${displayDriver === '—' ? 'text-slate-400 italic' : 'text-slate-800 dark:text-white'}`} title={displayDriver}>{displayDriver}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-slate-700 dark:text-app-muted flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-sm">navigation</span>
-                            Route
+                            <span className="material-symbols-outlined text-sm">group</span>
+                            Helper
                         </span>
-                        <span className="text-slate-800 dark:text-white font-medium text-right truncate max-w-[110px]" title={routeName}>{routeName}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-slate-700 dark:text-app-muted flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-sm">inventory_2</span>
-                            Cargo
+                        <span className={`font-medium text-right truncate max-w-[110px] ${!helperName ? 'text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>
+                            {helperName || '—'}
                         </span>
-                        <span className="text-slate-800 dark:text-white font-medium text-right truncate max-w-[110px]" title={cargoType}>{cargoType}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-slate-700 dark:text-app-muted flex items-center gap-1.5 font-medium">
                             <span className="material-symbols-outlined text-sm">schedule</span>
-                            ETA
+                            ETA Akhir
                         </span>
-                        <span className="text-slate-800 dark:text-white font-medium text-right">{eta}</span>
+                        <span className={`font-medium text-right ${displayEta === '—' ? 'text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>{displayEta}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-slate-700 dark:text-app-muted flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-sm">speed</span>
-                            Speed
+                            <span className="material-symbols-outlined text-sm">storefront</span>
+                            Stop Hari Ini
                         </span>
-                        <span className="text-slate-800 dark:text-white font-medium text-right">{speedKmH} km/h</span>
+                        <span className={`font-medium text-right ${displayStops === '—' ? 'text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>{displayStops}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-slate-700 dark:text-app-muted flex items-center gap-1.5 font-medium">
+                            <span className="material-symbols-outlined text-sm">scale</span>
+                            Muatan
+                        </span>
+                        <span className={`font-medium text-right ${loadPct > 80 ? 'text-amber-500' : 'text-slate-800 dark:text-white'}`}>
+                            {capacity > 0 ? `${loadPct}% (${currentLoad.toFixed(0)} kg)` : '—'}
+                        </span>
                     </div>
             </div>
         </div>

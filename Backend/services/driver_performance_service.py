@@ -74,9 +74,18 @@ def get_real_driver_performance(db: Session, start_date_str: str, end_date_str: 
                 status = "Resting"
                 last_loc = "📍 Kembali ke Depo (Selesai)"
 
-        # 🌟 4. KALKULASI SCORE & RATE (Bisa disesuaikan dari periode tanggal juga)
-        ontime_rate = round((ontime_count_today / do_total_today) * 100) if do_total_today > 0 else (100 if status == "Offline" else 0)
-        score = min(70 + (ontime_rate // 3) + (10 if do_completed_today > 0 else 0), 100)
+        # 🌟 4. KALKULASI SCORE & RATE
+        # on_time_rate: % delivery yang tiba dalam toleransi 15 menit dari ETA
+        ontime_rate = round((ontime_count_today / do_total_today) * 100) if do_total_today > 0 else 0
+
+        # score = progress pengiriman hari ini (berapa % toko sudah diselesaikan)
+        # - Kalau ada 10 toko hari ini dan sudah 7 selesai → 70%
+        # - Driver Offline / tidak ada rute → score kosong (None)
+        # - Score 100% = semua toko sudah selesai hari ini
+        if status == "Offline" or do_total_today == 0:
+            score = None  # kosong, bukan 0 — belum/tidak bertugas hari ini
+        else:
+            score = round((do_completed_today / do_total_today) * 100)
         
         # Bikin ID format 3 digit
         drv_id_str = f"DRV-{d.driver_id:03d}"
@@ -86,8 +95,8 @@ def get_real_driver_performance(db: Session, start_date_str: str, end_date_str: 
             "name": d.name,
             "avatar": f"https://ui-avatars.com/api/?name={d.name.replace(' ', '+')}&background=0D8ABC&color=fff",
             "status": status,
-            "score": score if status != "Offline" else "-",
-            "ontime": f"{ontime_rate}%" if status != "Offline" else "-",
+            "score": score,   # None = tidak bertugas, 0-100 = progress hari ini
+            "ontime": f"{ontime_rate}%" if do_total_today > 0 else ("-" if status == "Offline" else "0%"),
             "doSuccess": f"{do_completed_today}",
             "truck": truck_plate,
             "distanceToday": round(jarak_today, 1),
