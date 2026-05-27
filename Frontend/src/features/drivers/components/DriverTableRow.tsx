@@ -57,9 +57,22 @@ export default function DriverTableRow({ driver, isExpanded, onToggle }: DriverT
                 </td>
                 <td className="px-6 py-4">
                     <div className="flex items-center gap-1.5">
-                        <span className={`material-symbols-outlined text-lg ${driver?.score >= 90 ? 'text-amber-500' : 'text-slate-300'}`} style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
-                        <span className="font-bold text-slate-800 dark:text-white">{driver?.score || '-'}</span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500">/100</span>
+                        {driver?.score != null ? (
+                            <>
+                                <span
+                                    className={`material-symbols-outlined text-lg ${
+                                        driver.score >= 90 ? 'text-amber-500'
+                                        : driver.score >= 70 ? 'text-emerald-500'
+                                        : 'text-slate-300'
+                                    }`}
+                                    style={{ fontVariationSettings: "'FILL' 1" }}
+                                >stars</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{driver.score}%</span>
+                                <span className="text-xs text-slate-400 dark:text-slate-500">progress</span>
+                            </>
+                        ) : (
+                            <span className="text-xs text-slate-400 dark:text-slate-500 italic">— tidak bertugas</span>
+                        )}
                     </div>
                 </td>
                 <td className="px-6 py-4">

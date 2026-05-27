@@ -55,6 +55,56 @@ export default function VrpSettings({ formData, onChange }: VrpSettingsProps) {
                 </div>
             </div>
 
+            {/* Geofence POD */}
+            <div className="bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333] rounded-xl p-8 shadow-sm mt-6">
+                <div className="mb-4">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
+                        Geofence ePOD
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Radius dan waktu minimum yang dipakai sistem untuk validasi posisi GPS driver
+                        saat submit ePOD. Driver di luar radius → delivery di-flag anomali.
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Radius Geofence (Meter)
+                        </label>
+                        <div className="relative">
+                            <input
+                                value={formData.geofence_radius_meters ?? 200}
+                                onChange={(e) => onChange('geofence_radius_meters', Number(e.target.value))}
+                                className="w-full px-4 py-2 pr-12 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333] rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm text-[#111] dark:text-white transition-all text-right"
+                                type="number"
+                                min="50"
+                                max="2000"
+                                step="50"
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">m</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400">Rekomen: 200m di perkotaan, 500m di luar kota</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Dwell Time Minimum (Menit)
+                        </label>
+                        <div className="relative">
+                            <input
+                                value={formData.dwell_time_mins ?? 3}
+                                onChange={(e) => onChange('dwell_time_mins', Number(e.target.value))}
+                                className="w-full px-4 py-2 pr-16 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333] rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm text-[#111] dark:text-white transition-all text-right"
+                                type="number"
+                                min="1"
+                                max="30"
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium">menit</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400">Waktu minimum driver harus di lokasi sebelum dianggap valid</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Geofence Jembatan Timbang */}
             <div className="bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333] rounded-xl p-8 shadow-sm mt-6">
                 <div className="mb-4">

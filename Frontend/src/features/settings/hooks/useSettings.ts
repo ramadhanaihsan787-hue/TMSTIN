@@ -21,6 +21,9 @@ const defaultSettings: SettingsFormData = {
     sync_interval_sec: 60,
     alert_max_temp_celsius: 4.0,
     alert_delay_mins: 30,
+    // Geofence POD — radius check saat driver submit ePOD
+    geofence_radius_meters: 200,
+    dwell_time_mins:        3,
     // Jembatan timbang WH Cikupa (koordinat default)
     jembatan_timbang_lat:      -6.206353,
     jembatan_timbang_lon:      106.480681,

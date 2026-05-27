@@ -46,7 +46,7 @@ export default function OverviewDashboard() {
 
                 // Ambil data hari ini dari manager/overview (lebih kaya dari kpi-summary)
                 const [overviewRes, kpiRes] = await Promise.all([
-                    api.get('/api/manager/overview'),
+                    api.get('/api/analytics/manager/overview'),
                     api.get('/analytics/kpi-summary', { params: { startDate, endDate } })
                 ]);
 

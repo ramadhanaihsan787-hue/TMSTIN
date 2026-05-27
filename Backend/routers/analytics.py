@@ -163,63 +163,169 @@ def get_manager_overview(
 @router.get("/analytics/export")
 @router.get("/api/analytics/export")
 def export_analytics_data(
-    format: str = "xlsx", 
+    format: str = "pdf",
     startDate: Optional[str] = None,
     endDate: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("manager_logistik", "admin_distribusi"))
 ):
+    """
+    Generate laporan logistik dalam format PDF.
+    Berisi ringkasan DO, status pengiriman, dan total berat per periode.
+    """
     if not startDate: startDate = str(date.today())
-    if not endDate: endDate = str(date.today())
+    if not endDate:   endDate   = str(date.today())
 
     try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
         start_dt = datetime.strptime(startDate, "%Y-%m-%d")
-        end_dt = datetime.strptime(endDate, "%Y-%m-%d")
+        end_dt   = datetime.strptime(endDate,   "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59
+        )
 
         orders = db.query(models.DeliveryOrder).filter(
             models.DeliveryOrder.created_at >= start_dt,
             models.DeliveryOrder.created_at <= end_dt
-        ).all()
-        
-        export_data = []
-        for o in orders:
-            export_data.append({
-                "Order ID": o.order_id,
-                "Customer": (
-                    o.customer.store_name
-                    if o.customer
-                    else "Unknown"
-                ),
-                "Status": o.status.value if o.status else "Unknown",
-                "Total Weight (KG)": o.weight_total,
-                "Tiba di Toko": (
-                    o.route_line.actual_arrival_time.strftime("%Y-%m-%d %H:%M:%S")
-                    if (
-                        o.route_line and
-                        o.route_line.actual_arrival_time
-                    )
-                    else "Belum Tiba"
-                ),  
-            })
+        ).order_by(models.DeliveryOrder.created_at).all()
 
-        if not export_data:
-            export_data.append({"Info": f"Tidak ada data DO untuk periode {startDate} hingga {endDate}"})
+        # ── Build PDF ──────────────────────────────────────────────────────
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=A4,
+            rightMargin=2*cm, leftMargin=2*cm,
+            topMargin=2*cm, bottomMargin=2*cm
+        )
 
-        df = pd.DataFrame(export_data)
+        styles  = getSampleStyleSheet()
+        PRIMARY = colors.HexColor("#D54B00")  # warna brand
 
-        stream = io.BytesIO()
-        with pd.ExcelWriter(stream, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Delivery Orders', index=False)
-            
-        stream.seek(0)
+        title_style = ParagraphStyle(
+            "Title", parent=styles["Heading1"],
+            fontSize=16, textColor=PRIMARY, alignment=TA_CENTER, spaceAfter=6
+        )
+        sub_style = ParagraphStyle(
+            "Sub", parent=styles["Normal"],
+            fontSize=9, textColor=colors.grey, alignment=TA_CENTER, spaceAfter=20
+        )
+        label_style = ParagraphStyle(
+            "Label", parent=styles["Normal"], fontSize=8, textColor=colors.grey
+        )
 
-        filename = f"JAPFA_Logistics_Report_{startDate}_to_{endDate}.xlsx"
-        
+        elements = []
+
+        # Header
+        elements.append(Paragraph("LAPORAN LOGISTIK", title_style))
+        elements.append(Paragraph(
+            f"PT So Good Food (Fresh) WH Cikupa &nbsp;|&nbsp; "
+            f"Periode: {startDate} s/d {endDate}",
+            sub_style
+        ))
+        elements.append(Spacer(1, 0.3*cm))
+
+        # Summary cards row
+        total_do      = len(orders)
+        delivered_ok  = sum(1 for o in orders
+                            if o.status and "delivered_success" in str(o.status))
+        delivered_par = sum(1 for o in orders
+                            if o.status and "delivered_partial" in str(o.status))
+        total_weight  = sum(float(o.weight_total or 0) for o in orders)
+
+        summary_data = [
+            ["Total DO", "Sukses", "Parsial", "Total Muatan"],
+            [
+                str(total_do),
+                str(delivered_ok),
+                str(delivered_par),
+                f"{total_weight:,.1f} KG"
+            ],
+        ]
+        sum_table = Table(summary_data, colWidths=[4*cm]*4)
+        sum_table.setStyle(TableStyle([
+            ("BACKGROUND",  (0,0), (-1,0), PRIMARY),
+            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",    (0,0), (-1,-1), 9),
+            ("ALIGN",       (0,0), (-1,-1), "CENTER"),
+            ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+            ("ROWHEIGHT",   (0,0), (-1,-1), 20),
+            ("BACKGROUND",  (0,1), (-1,1), colors.HexColor("#FFF3EB")),
+            ("FONTNAME",    (0,1), (-1,1), "Helvetica-Bold"),
+            ("FONTSIZE",    (0,1), (-1,1), 12),
+            ("GRID",        (0,0), (-1,-1), 0.5, colors.HexColor("#E0E0E0")),
+            ("BOX",         (0,0), (-1,-1), 1,   PRIMARY),
+            ("TOPPADDING",  (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING",(0,0), (-1,-1), 6),
+        ]))
+        elements.append(sum_table)
+        elements.append(Spacer(1, 0.5*cm))
+
+        # Detail table header
+        elements.append(Paragraph("Detail Delivery Order", ParagraphStyle(
+            "SH", parent=styles["Heading2"], fontSize=10, textColor=PRIMARY, spaceAfter=8
+        )))
+
+        if orders:
+            table_data = [["No.", "Order ID", "Customer", "Status", "Berat (KG)", "Tiba di Toko"]]
+            for idx, o in enumerate(orders, 1):
+                cust   = o.customer.store_name if o.customer else "—"
+                status = str(o.status.value).replace("_", " ").title() if o.status else "—"
+                berat  = f"{float(o.weight_total or 0):,.0f}"
+                tiba   = "—"
+                try:
+                    if o.route_line and o.route_line.actual_arrival_time:
+                        tiba = o.route_line.actual_arrival_time.strftime("%d/%m %H:%M")
+                except: pass
+                table_data.append([str(idx), o.order_id, cust[:28], status, berat, tiba])
+
+            col_w = [1*cm, 3*cm, 6*cm, 3*cm, 2.5*cm, 2*cm]
+            det_table = Table(table_data, colWidths=col_w, repeatRows=1)
+            det_table.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0), (-1,0), PRIMARY),
+                ("TEXTCOLOR",    (0,0), (-1,0), colors.white),
+                ("FONTNAME",     (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",     (0,0), (-1,-1), 7.5),
+                ("ALIGN",        (0,0), (1,-1),  "CENTER"),
+                ("ALIGN",        (4,0), (5,-1),  "CENTER"),
+                ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.white, colors.HexColor("#FBF7F5")]),
+                ("GRID",         (0,0), (-1,-1), 0.4, colors.HexColor("#E0E0E0")),
+                ("BOX",          (0,0), (-1,-1), 0.8, colors.HexColor("#CCCCCC")),
+                ("TOPPADDING",   (0,0), (-1,-1), 4),
+                ("BOTTOMPADDING",(0,0), (-1,-1), 4),
+            ]))
+            elements.append(det_table)
+        else:
+            elements.append(Paragraph(
+                f"Tidak ada data Delivery Order untuk periode {startDate} s/d {endDate}.",
+                styles["Normal"]
+            ))
+
+        # Footer
+        elements.append(Spacer(1, 1*cm))
+        elements.append(Paragraph(
+            f"Digenerate otomatis oleh TMS JAPFA FnB · {datetime.now().strftime('%d %b %Y %H:%M')}",
+            ParagraphStyle("Footer", parent=styles["Normal"],
+                           fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
+        ))
+
+        doc.build(elements)
+        buf.seek(0)
+
+        filename = f"Laporan_JAPFA_{startDate}_sd_{endDate}.pdf"
         return StreamingResponse(
-            stream, 
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            buf,
+            media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gagal generate Excel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal generate PDF: {str(e)}")

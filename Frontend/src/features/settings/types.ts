@@ -23,7 +23,10 @@ export interface SettingsFormData {
     
     alert_max_temp_celsius: number;
     alert_delay_mins: number;
-    // Geofence jembatan timbang
+    // Geofence POD (ePOD radius check per toko)
+    geofence_radius_meters:    number;
+    dwell_time_mins:           number;
+    // Geofence jembatan timbang (auto-lock jam pulang driver)
     jembatan_timbang_lat:      number | null;
     jembatan_timbang_lon:      number | null;
     jembatan_timbang_radius_m: number;
