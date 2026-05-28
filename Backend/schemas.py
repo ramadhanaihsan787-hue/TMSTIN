@@ -384,6 +384,8 @@ class SystemSettingsUpdate(BaseModel):
     jembatan_timbang_lat:      Optional[float] = None
     jembatan_timbang_lon:      Optional[float] = None
     jembatan_timbang_radius_m: int = 100
+    # Harga BBM per liter untuk kalkulasi rasio BOP
+    harga_bbm_per_liter: float = 12500.0
 
 class SettingsResponse(BaseModel):
     status: str = "success"

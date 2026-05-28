@@ -28,6 +28,7 @@ const defaultSettings: SettingsFormData = {
     jembatan_timbang_lat:      -6.206353,
     jembatan_timbang_lon:      106.480681,
     jembatan_timbang_radius_m: 30,
+    harga_bbm_per_liter: 12500,
 };
 
 export const useSettings = () => {

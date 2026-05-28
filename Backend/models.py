@@ -264,6 +264,9 @@ class SystemSettings(Base):
     jembatan_timbang_lon      = Column(Float, nullable=True)
     jembatan_timbang_radius_m = Column(Integer, default=100)
 
+    # Harga BBM per liter — untuk kalkulasi rasio km/liter di BOP export
+    harga_bbm_per_liter = Column(Float, default=12500.0, nullable=True)
+
     alert_channel_dashboard = Column(Boolean, default=True)
     alert_channel_email = Column(Boolean, default=True)
     alert_channel_whatsapp = Column(Boolean, default=False)

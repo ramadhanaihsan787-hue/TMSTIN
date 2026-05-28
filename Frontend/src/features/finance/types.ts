@@ -8,6 +8,9 @@ export interface ExpenseEntry {
     vehicleType: string;
     driver: string;
     isOncall: boolean;
+    // FK ke master data — wajib ada agar relasi DB terbentuk
+    vehicle_id?: number;
+    driver_id?:  number;
     bbm: number;
     tol: number;
     parkir: number;

@@ -257,21 +257,25 @@ def export_bop(
     ws.row_dimensions[4].height = 28
     ws.row_dimensions[5].height = 12
 
+    # Ambil harga BBM dari settings — tidak hardcode 12500
+    _settings   = db.query(models.SystemSettings).first()
+    _harga_bbm  = float(_settings.harga_bbm_per_liter or 12500.0) if _settings else 12500.0
+
+    # Pre-load semua driver dan vehicle sekali — hindari N+1 query
+    _all_drivers  = {d.driver_id: d for d in db.query(models.HRDriver).all()}
+    _all_vehicles = {v.vehicle_id: v for v in db.query(models.FleetVehicle).all()}
+
     # Data rows
     DATA_START = 6
     for idx, e in enumerate(expenses, start=1):
         r = DATA_START + idx - 1
-        driver_name = ""
         helper_name = e.helper_name or ""
-        
-        if e.driver_id:
-            drv = db.query(models.HRDriver).filter(models.HRDriver.driver_id == e.driver_id).first()
-            if drv: driver_name = drv.name
-            
-        plate = ""
-        if e.vehicle_id:
-            v = db.query(models.FleetVehicle).filter(models.FleetVehicle.vehicle_id == e.vehicle_id).first()
-            if v: plate = v.license_plate
+
+        drv          = _all_drivers.get(e.driver_id) if e.driver_id else None
+        driver_name  = drv.name if drv else ""
+
+        veh   = _all_vehicles.get(e.vehicle_id) if e.vehicle_id else None
+        plate = veh.license_plate if veh else ""
 
         km_awal = e.km_awal or ""
         km_akhir = e.km_akhir or ""
@@ -279,7 +283,7 @@ def export_bop(
         
         if e.km_awal and e.km_akhir and e.bbm and e.bbm > 0:
             jarak = e.km_akhir - e.km_awal
-            liter = round(e.bbm / 12500, 1)
+            liter = round(e.bbm / _harga_bbm, 1)
             if liter > 0:
                 rasio = round(jarak / liter, 1)
 
@@ -401,7 +405,9 @@ async def parse_bop_excel(
             for hdr, field in HEADER_MAP.items():
                 if key == hdr:
                     col_map[field] = col_idx
-                    data_start_row = row_idx + 1 
+                    # Pakai max() agar header yang paling bawah yang menentukan baris data
+                    # (BOP punya multi-row header: row 3 kolom utama, row 4 sub-header biaya)
+                    data_start_row = max(data_start_row, row_idx + 1) if data_start_row else row_idx + 1
 
     if not col_map or not data_start_row:
         raise HTTPException(status_code=422, detail="Format Excel tidak dikenali. Pastikan header ada.")

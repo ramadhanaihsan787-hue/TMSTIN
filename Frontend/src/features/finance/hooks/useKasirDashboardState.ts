@@ -45,8 +45,20 @@ export function useKasirDashboardState() {
     const [importToastMsg, setImportToastMsg] = useState({ title: '', desc: '' });
 
     const currentPlate = isOncall ? oncallPlate : (fleets[selectedFleetIdx]?.plate || '');
+    // Driver: kalau __custom__ pakai teks manual, kalau dari list pakai name
     const currentDriver = selectedDriver === '__custom__' ? customDriver : selectedDriver;
     const currentHelper = selectedHelper === '__custom__' ? customHelper : selectedHelper;
+
+    // Cari vehicle_id dan driver_id untuk FK ke master data
+    const currentVehicleId = !isOncall
+        ? (fleets[selectedFleetIdx]?.id ?? null)
+        : null;
+    const currentDriverObj  = (drivers as any[]).find(
+        (d: any) => (typeof d === 'object' ? d.name : d) === currentDriver
+    );
+    const currentDriverId   = typeof currentDriverObj === 'object'
+        ? (currentDriverObj?.id ?? null)
+        : null;
 
     const n = (v: string | number) => Number(v) || 0;
     const total = n(bbm) + n(tol) + n(parkir) + n(parkirLiar) + n(kuliAngkut) + n(lainLain);
@@ -88,10 +100,13 @@ export function useKasirDashboardState() {
             if (!data) return;
 
             // Auto-fill driver & helper kalau ada dari rute
-            if (data.driver_name && drivers.some(d => d.name === data.driver_name)) {
+            const driverList = (drivers as any[]).map((d: any) =>
+                typeof d === 'object' ? d.name : d
+            );
+            if (data.driver_name && driverList.includes(data.driver_name)) {
                 setSelectedDriver(data.driver_name);
             }
-            if (data.helper_name && drivers.some(d => d.name === data.helper_name)) {
+            if (data.helper_name && driverList.includes(data.helper_name)) {
                 setSelectedHelper(data.helper_name);
             }
 
@@ -121,10 +136,13 @@ export function useKasirDashboardState() {
             id: editingId || undefined,
             time: originalEntry ? originalEntry.time : now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             date: originalEntry ? originalEntry.date : now.toISOString().split('T')[0],
-            plate: currentPlate,
+            plate:       currentPlate,
             vehicleType: isOncall ? 'Oncall' : (fleets[selectedFleetIdx]?.type || 'Unknown'),
-            driver: currentDriver,
+            driver:      currentDriver,
             isOncall,
+            // FK ke master data — wajib untuk relasi DB terbentuk
+            vehicle_id: currentVehicleId  ?? undefined,
+            driver_id:  currentDriverId   ?? undefined,
             bbm: n(bbm), tol: n(tol), parkir: n(parkir),
             parkirLiar: n(parkirLiar), kuliAngkut: n(kuliAngkut), lainLain: n(lainLain),
             helperName: currentHelper, notes: '', total,

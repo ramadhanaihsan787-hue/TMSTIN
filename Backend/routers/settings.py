@@ -59,6 +59,7 @@ def get_system_settings(
             "jembatan_timbang_lat":      settings.jembatan_timbang_lat,
             "jembatan_timbang_lon":      settings.jembatan_timbang_lon,
             "jembatan_timbang_radius_m": settings.jembatan_timbang_radius_m or 100,
+            "harga_bbm_per_liter":       settings.harga_bbm_per_liter or 12500.0,
             "geofence_radius_meters": settings.geofence_radius_meters,
             "dwell_time_mins": settings.dwell_time_mins,
             "anomaly_tolerance_percent": settings.anomaly_tolerance_percent,
