@@ -184,7 +184,13 @@ def get_fleet_utilization(db: Session, start_date_str: str, end_date_str: str):
         models.TMSRoutePlan.planning_date <= end_date
     ).count()
 
-    active_avg  = round(total_rute / days)
+    # active_trucks = jumlah rute HARI INI (bukan rata-rata periode)
+    from datetime import datetime as _dt
+    today_count = db.query(models.TMSRoutePlan).filter(
+        models.TMSRoutePlan.planning_date == _dt.now().date()
+    ).count()
+
+    active_avg  = today_count  # tampilkan jumlah aktual hari ini
     utilization = min(round((active_avg / total_truck) * 100), 100)
 
     return {

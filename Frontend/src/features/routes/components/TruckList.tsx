@@ -11,6 +11,7 @@ const getTruckColors = (loadPercent: number) => {
 interface Truck3DProps {
     plateNumber: string;
     driverName: string;
+    helperName?: string;
     truckType: string;
     zone: string;
     colorHex: string;
@@ -26,7 +27,7 @@ interface Truck3DProps {
 }
 
 // 🌟 KOMPONEN TRUK 3D KITA UMPETIN DI DALEM FILE INI BIAR RAPI
-const Truck3D = ({ plateNumber, driverName, truckType, zone, colorHex, percent, outerText, loadKg, colorClass, isSelected, onClick, warningCount, criticalCount }: Truck3DProps) => {
+const Truck3D = ({ plateNumber, driverName, helperName, truckType, zone, colorHex, percent, outerText, loadKg, colorClass, isSelected, onClick, warningCount, criticalCount }: Truck3DProps) => {
     return (
         <div onClick={onClick} className={`bg-white dark:bg-[#1F1F1F] p-4 rounded-xl shadow-sm transition-all cursor-pointer relative overflow-visible ${isSelected ? 'border-2 border-primary ring-4 ring-primary/5 shadow-md scale-[1.02]' : 'border border-slate-200 dark:border-[#333] hover:border-primary/50'}`}>
             
@@ -44,6 +45,12 @@ const Truck3D = ({ plateNumber, driverName, truckType, zone, colorHex, percent, 
                         {isSelected && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">SELECTED</span>}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{driverName} | {truckType}</p>
+                {helperName && helperName !== '-' && (
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[10px]">group</span>
+                        Helper: {helperName}
+                    </p>
+                )}
                 </div>
                 <span className="text-xs font-bold text-slate-400 dark:text-slate-300">ZONE: {zone}</span>
             </div>
@@ -113,8 +120,8 @@ export default function TruckList({ routesData, selectedRouteId, onSelectRoute, 
         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-10">
             {routesData.length > 0 ? (
                 routesData.map((route) => {
-                    const maxCap = 2000;
-                    
+                    const maxCap = (route as any).capacity || route.capacity || 2000;
+
                     const currentWeight = route.totalWeight ?? (route as any).total_weight ?? (route as any).total_berat ?? 0;
                     const loadPercent = Math.min(Math.round((currentWeight / maxCap) * 100), 100) || 0;
                     const colors = getTruckColors(loadPercent);
@@ -130,12 +137,13 @@ export default function TruckList({ routesData, selectedRouteId, onSelectRoute, 
                             key={currentRouteId}
                             plateNumber={route.vehicle ?? (route as any).kendaraan ?? "-"}
                             driverName={route.driverName ?? (route as any).driver_name ?? "-"}
+                            helperName={(route as any).helperName ?? (route as any).helper_name ?? ""}
                             truckType={route.vehicleType ?? (route as any).jenis ?? "-"}
                             zone={route.zone ?? "-"}
                             colorHex={colors.hex}
                             percent={loadPercent}
                             outerText={colors.text}
-                            loadKg={`${currentWeight} / ${maxCap} Kg`}
+                            loadKg={`${currentWeight.toLocaleString('id-ID')} / ${maxCap.toLocaleString('id-ID')} Kg`}
                             colorClass={colors.class}
                             isSelected={selectedRouteId === currentRouteId}
                             onClick={() => onSelectRoute(currentRouteId)}

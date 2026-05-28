@@ -55,15 +55,15 @@ export default function VrpSettings({ formData, onChange }: VrpSettingsProps) {
                 </div>
             </div>
 
-            {/* Harga BBM */}
+            {/* Harga BBM per Liter */}
             <div className="bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333] rounded-xl p-8 shadow-sm mt-6">
                 <div className="mb-4">
                     <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
                         Harga BBM per Liter
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Dipakai untuk kalkulasi rasio km/liter di kolom BOP export Excel.
-                        Perbarui saat harga Pertamina berubah.
+                        Dipakai untuk menghitung rasio km/liter di kolom BOP export Excel.
+                        Update saat harga Pertamina berubah agar laporan tetap akurat.
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 max-w-xs">
@@ -76,17 +76,16 @@ export default function VrpSettings({ formData, onChange }: VrpSettingsProps) {
                             value={formData.harga_bbm_per_liter ?? 12500}
                             onChange={(e) => onChange('harga_bbm_per_liter', Number(e.target.value))}
                             className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-200 dark:border-[#333] rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm text-[#111] dark:text-white transition-all text-right"
-                            type="number"
-                            min="5000"
-                            max="30000"
-                            step="500"
+                            type="number" min="5000" max="30000" step="500"
                         />
                     </div>
-                    <p className="text-[10px] text-slate-400">Pertalite saat ini: Rp 10.000, Pertamax: Rp 13.900</p>
+                    <p className="text-[10px] text-slate-400">
+                        Pertalite: Rp 10.000 · Pertamax: Rp 13.900 · Solar: Rp 6.800
+                    </p>
                 </div>
             </div>
 
-            {/* Geofence POD */}
+                        {/* Geofence POD */}
             <div className="bg-white dark:bg-[#111111] border border-slate-200 dark:border-[#333] rounded-xl p-8 shadow-sm mt-6">
                 <div className="mb-4">
                     <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-1">

@@ -130,7 +130,8 @@ export const useFleet = () => {
     // KPI
     // ─────────────────────────────────────────────────────────────────────
     const kpi = useMemo(() => ({
-        activeCount:      fleetList.filter(t => t.status === 'Available' || t.status === 'On Trip').length,
+        // Aktif hari ini = punya rute yang sudah di-dispatch (bukan hanya status Available)
+        activeCount:      fleetList.filter(t => t.routeIdToday != null).length,
         maintenanceCount: fleetList.filter(t => t.status === 'Maintenance').length,
         totalCount:       fleetList.length,
         avgFuelEfficiency: 8.2,

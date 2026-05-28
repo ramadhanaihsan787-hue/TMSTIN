@@ -32,8 +32,10 @@ export interface RouteItem {
   status: RouteStatus;
   zone: string;
   details: RouteDetail[];
+  // Crew dan kapasitas
+  helperName?: string;
+  capacity?:   number;
   // geometry: garis rute asli OSRM dalam format [lon, lat][] (Mapbox native)
-  // Diisi dari garis_aspal backend. polyline dipertahankan untuk backward compat.
   geometry?: [number, number][];
   polyline?: [number, number][];
 }

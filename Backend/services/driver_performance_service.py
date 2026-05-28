@@ -20,11 +20,22 @@ def get_real_driver_performance(db: Session, start_date_str: str, end_date_str: 
     hasil = []
 
     for d in drivers:
-        # 🌟 1. CARI RUTE HARI INI BUAT DAPETIN TRUK AKTIF & JARAK
+        # Cek apakah driver bertugas sebagai DRIVER atau HELPER hari ini
+        # Priority: cari sebagai driver dulu, fallback ke helper
         rute_today = db.query(models.TMSRoutePlan).filter(
             models.TMSRoutePlan.driver_id == d.driver_id,
             models.TMSRoutePlan.planning_date == today
         ).first()
+
+        # Kalau tidak ditemukan sebagai driver, cek sebagai helper
+        _as_helper = False
+        if not rute_today:
+            rute_today = db.query(models.TMSRoutePlan).filter(
+                models.TMSRoutePlan.helper_id == d.driver_id,
+                models.TMSRoutePlan.planning_date == today
+            ).first()
+            if rute_today:
+                _as_helper = True
 
         truck_plate = "-"
         status = "Offline"
@@ -91,14 +102,15 @@ def get_real_driver_performance(db: Session, start_date_str: str, end_date_str: 
         drv_id_str = f"DRV-{d.driver_id:03d}"
 
         hasil.append({
-            "id": drv_id_str,
-            "name": d.name,
-            "avatar": f"https://ui-avatars.com/api/?name={d.name.replace(' ', '+')}&background=0D8ABC&color=fff",
+            "id":     drv_id_str,
+            "name":   d.name,
+            "role":   "Helper" if _as_helper else "Driver",  # untuk UI labeling
+            "avatar": f"https://ui-avatars.com/api/?name={d.name.replace(' ', '+')}&background={'16a34a' if _as_helper else '0D8ABC'}&color=fff",
             "status": status,
-            "score": score,   # None = tidak bertugas, 0-100 = progress hari ini
+            "score":  score,
             "ontime": f"{ontime_rate}%" if do_total_today > 0 else ("-" if status == "Offline" else "0%"),
             "doSuccess": f"{do_completed_today}",
-            "truck": truck_plate,
+            "truck":  truck_plate,
             "distanceToday": round(jarak_today, 1),
             "doCompleted": do_completed_today,
             "doTotal": do_total_today,

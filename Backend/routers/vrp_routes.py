@@ -119,26 +119,28 @@ def get_routes(
         )
 
         hasil.append({
-            "route_id": rute.route_id,
-            "id": rute.route_id,
-            "tanggal": str(rute.planning_date),
-            "driver_name": rute.driver.name if rute.driver else "-",
-            "kendaraan": rute.vehicle.license_plate if rute.vehicle else "-",
-            "armada": rute.vehicle.license_plate if rute.vehicle else "-",
-            "vehicle": rute.vehicle.license_plate if rute.vehicle else "-",
-            "jenis": rute.vehicle.type if rute.vehicle else "-",
-            "destinasi_jumlah": len(detail_rute),
-            "total_berat": rute.total_weight,
-            "total_muatan_kg": rute.total_weight or 0.0,
-            "total_weight": rute.total_weight or 0.0,
+            "route_id":          rute.route_id,
+            "id":                rute.route_id,
+            "tanggal":           str(rute.planning_date),
+            "driver_name":       rute.driver.name if rute.driver else "-",
+            "helper_name":       rute.helper.name if rute.helper else "-",
+            "kendaraan":         rute.vehicle.license_plate if rute.vehicle else "-",
+            "armada":            rute.vehicle.license_plate if rute.vehicle else "-",
+            "vehicle":           rute.vehicle.license_plate if rute.vehicle else "-",
+            "jenis":             rute.vehicle.type if rute.vehicle else "-",
+            "capacity_kg":       float(rute.vehicle.capacity_kg) if rute.vehicle and rute.vehicle.capacity_kg else 2000.0,
+            "destinasi_jumlah":  len(detail_rute),
+            "total_berat":       rute.total_weight,
+            "total_muatan_kg":   rute.total_weight or 0.0,
+            "total_weight":      rute.total_weight or 0.0,
             "total_distance_km": rute.total_distance_km,
-            "total_jarak_km": rute.total_distance_km or 0.0,
-            "transport_cost": transport_cost,
-            "status": "Aktif",
-            "zone": zona_dummy[idx_zona],
-            "detail_rute": detail_rute,
+            "total_jarak_km":    rute.total_distance_km or 0.0,
+            "transport_cost":    transport_cost,
+            "status":            "Aktif",
+            "zone":              zona_dummy[idx_zona],
+            "detail_rute":       detail_rute,
             "detail_perjalanan": detail_rute,
-            "garis_aspal": garis_aspal,
+            "garis_aspal":       garis_aspal,
         })
 
     dropped_nodes_response = []
@@ -393,6 +395,19 @@ def confirm_routes(
 
             if not vehicle:
                 raise ValueError(f"Armada '{nopol}' tidak ditemukan di master kendaraan!")
+
+            # ── VALIDASI KAPASITAS ────────────────────────────────────────
+            # Re-validasi muatan vs kapasitas setelah admin bisa edit manual
+            if vehicle.capacity_kg:
+                total_muatan = float(truk.get("total_muatan_kg", 0))
+                kapasitas    = float(vehicle.capacity_kg)
+                if total_muatan > kapasitas * 1.05:   # toleransi 5%
+                    raise ValueError(
+                        f"Armada '{nopol}' kelebihan muatan! "
+                        f"Total muatan {total_muatan:.0f} kg melebihi kapasitas "
+                        f"{kapasitas:.0f} kg."
+                    )
+            # ── END VALIDASI KAPASITAS ────────────────────────────────────
 
             hlp_id = truk.get("helper_id")
             if str(hlp_id).lower() in ["103", "0", "", "none", "null"]:

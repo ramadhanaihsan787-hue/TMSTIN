@@ -22,6 +22,15 @@ export const useLogin = () => {
             // 🌟 1. Tembak API Login kita!
             const data = await authService.login({ username: email, password });
             
+            // ==========================================
+            // 🌟 FIX CTO: SIMPAN KEDUA TOKEN KE LOCAL STORAGE
+            // ==========================================
+            localStorage.setItem('token', data.access_token);
+            if (data.refresh_token) {
+                localStorage.setItem('refresh_token', data.refresh_token);
+            }
+            // ==========================================
+            
             // 🌟 2. Simpen token ke Context (otomatis decode role di dalemnya)
             login(data.access_token); 
 

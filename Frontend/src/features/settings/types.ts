@@ -30,6 +30,5 @@ export interface SettingsFormData {
     jembatan_timbang_lat:      number | null;
     jembatan_timbang_lon:      number | null;
     jembatan_timbang_radius_m: number;
-    // Harga BBM per liter — untuk kalkulasi rasio di BOP export
     harga_bbm_per_liter: number;
 }

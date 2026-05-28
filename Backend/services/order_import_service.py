@@ -5,6 +5,7 @@ import re
 import logging
 
 from io import BytesIO
+import hashlib
 from sqlalchemy.orm import Session
 
 import models
@@ -289,6 +290,42 @@ def process_sap_file(
     default_end = time_str_to_minutes(
         settings.vrp_end_time
     )
+
+    # ==========================================
+    # DUPLICATE FILE DETECTION
+    # ==========================================
+    # Hitung hash isi file untuk deteksi upload berulang
+    _file_hash = hashlib.md5(file_bytes).hexdigest()
+
+    # Cek apakah hash ini sudah pernah diupload hari ini
+    # (Simpan sebagai notes di SystemAuditLog atau pakai cache sederhana)
+    try:
+        _today_str = str(__import__('datetime').date.today())
+        _recent_log = db.query(models.SystemAuditLog).filter(
+            models.SystemAuditLog.action == "order_upload",
+            models.SystemAuditLog.detail.contains(_file_hash),
+        ).order_by(models.SystemAuditLog.timestamp.desc()).first()
+
+        if _recent_log:
+            import datetime as _dt
+            _log_date = _recent_log.timestamp.date() if _recent_log.timestamp else None
+            if _log_date and (_dt.date.today() - _log_date).days == 0:
+                raise ValueError(
+                    f"⚠️ File ini sudah pernah diupload hari ini! "
+                    f"(hash: {_file_hash[:8]}...) "
+                    f"Jika ingin re-upload, hapus data hari ini terlebih dahulu."
+                )
+
+        # Catat upload ini di audit log
+        _audit = models.SystemAuditLog(
+            action="order_upload",
+            detail=f"hash={_file_hash} file={filename}",
+        )
+        db.add(_audit)
+    except ValueError:
+        raise
+    except Exception:
+        pass  # Audit log gagal tidak blokirr upload
 
     # ==========================================
     # DELETE OLD PENDING DO

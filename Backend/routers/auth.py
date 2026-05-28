@@ -1,5 +1,5 @@
 # Backend/routers/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -25,6 +25,7 @@ router = APIRouter(tags=["Authentication"])
 @limiter.limit("10/minute")
 def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -57,17 +58,23 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 @router.post("/auth/refresh")
-def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db)):
+def refresh_access_token(
+    request: Request,
+    response: Response,
+    data: RefreshTokenRequest = None,
+    db: Session = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Refresh token tidak valid atau sudah kadaluarsa!",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    # Priority: httpOnly cookie > request body (backward compat)
+    _rt = request.cookies.get("refresh_token") or (data.refresh_token if data else "")
+    if not _rt:
+        raise credentials_exception
     try:
-        # [QW-1] decode_refresh_token() pakai REFRESH_SECRET_KEY, bukan SECRET_KEY
-        # Access token yang belum expired tidak bisa dipakai di sini
-        # karena signed dengan kunci yang berbeda.
-        payload = decode_refresh_token(data.refresh_token)
+        payload = decode_refresh_token(_rt)
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
 

@@ -24,35 +24,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserData | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  // Pas aplikasi nyala, cek apakah ada token di kantong Browser
+  // Restore session via API refresh (mengirim refresh_token dari localStorage ke body)
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
+    const tryRestoreSession = async () => {
       try {
-        // Belah tokennya, liat KTP-nya
-        const decodedToken: any = jwtDecode(savedToken);
+        // 🌟 FIX CTO 1: Ambil token dari localStorage yang disimpen pas Login
+        const storedRefreshToken = localStorage.getItem('refresh_token');
         
-        // Cek kalau token expired (opsional tapi bagus)
-        if (decodedToken.exp * 1000 < Date.now()) {
-          logout();
-          return;
+        // 🌟 GEMBOK CTO: Kalau nggak ada token, berhenti di sini! (Selamat tinggal error 422)
+        if (!storedRefreshToken) {
+            return; 
         }
 
-        setToken(savedToken);
-        setRole(decodedToken.role);
-        setUser({ username: decodedToken.sub, role: decodedToken.role });
+        const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const res = await fetch(`${base}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // 🌟 FIX CTO 2: Kirim tokennya ke backend lewat body!
+          body: JSON.stringify({ refresh_token: storedRefreshToken }),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.access_token) {
+            const decoded: any = jwtDecode(data.access_token);
+            setToken(data.access_token);
+            setRole(decoded.role);
+            setUser({ username: decoded.sub, role: decoded.role });
+            
+            // Simpan refresh_token baru kalau dikasih ulang sama backend
+            if (data.refresh_token) {
+                localStorage.setItem('refresh_token', data.refresh_token);
+            }
+          }
+        } else {
+            // Kalau refresh token udah expired/ditolak backend, bersihkan penyimpanan
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('token');
+        }
       } catch (error) {
-        // Kalau tokennya palsu/rusak, langsung tendang!
-        logout();
+        console.error("Gagal restore session:", error);
       }
-    }
+    };
+    tryRestoreSession();
   }, []);
 
   const login = (newToken: string) => {
     try {
       const decodedToken: any = jwtDecode(newToken);
       
-      localStorage.setItem('token', newToken); // Simpen ke kantong
+      // Access token hanya di memory React
       setToken(newToken);
       setRole(decodedToken.role);
       setUser({ username: decodedToken.sub, role: decodedToken.role });
@@ -62,12 +83,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    // 1. Cukup buang KTP dari kantong browser
-    localStorage.removeItem('token'); 
-    
-    // 2. JANGAN PAKE setRole(null) ATAU setUser(null) DI SINI BIAR REACT-NYA GA KAGET DAN CRASH!
+    // Hapus semua jejak dari localStorage
+    try { 
+        localStorage.removeItem('token'); 
+        localStorage.removeItem('auth_token'); 
+        localStorage.removeItem('refresh_token'); // 🌟 FIX CTO 3: Bersihin token refresh!
+    } catch {}
 
-    // 3. Langsung tendang paksa ke halaman login (ini otomatis nge-reset semua state React)
+    // Redirect ke login (reset semua React state otomatis)
     window.location.href = '/login';
   };
 

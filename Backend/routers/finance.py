@@ -257,13 +257,24 @@ def export_bop(
     ws.row_dimensions[4].height = 28
     ws.row_dimensions[5].height = 12
 
-    # Ambil harga BBM dari settings — tidak hardcode 12500
-    _settings   = db.query(models.SystemSettings).first()
-    _harga_bbm  = float(_settings.harga_bbm_per_liter or 12500.0) if _settings else 12500.0
+    # ── Pre-load sekali — hindari N+1 query ──────────────────────────────────
+    # 1. Harga BBM dari settings (default 12500 kalau belum dikonfigurasi)
+    _settings  = db.query(models.SystemSettings).first()
+    _harga_bbm = float(_settings.harga_bbm_per_liter or 12500.0) if _settings else 12500.0
 
-    # Pre-load semua driver dan vehicle sekali — hindari N+1 query
+    # 2. Driver dan vehicle — dict untuk O(1) lookup
     _all_drivers  = {d.driver_id: d for d in db.query(models.HRDriver).all()}
     _all_vehicles = {v.vehicle_id: v for v in db.query(models.FleetVehicle).all()}
+
+    # 3. TMSRoutePlan per (vehicle_id, date) — fallback km dari driver app
+    _expense_dates = {e.date for e in expenses if e.date}
+    _route_plans: dict = {}
+    if _expense_dates:
+        for rp in db.query(models.TMSRoutePlan).filter(
+            models.TMSRoutePlan.planning_date.in_(list(_expense_dates))
+        ).all():
+            _route_plans.setdefault((rp.vehicle_id, rp.planning_date), rp)
+    # ─────────────────────────────────────────────────────────────────────────
 
     # Data rows
     DATA_START = 6
@@ -271,21 +282,38 @@ def export_bop(
         r = DATA_START + idx - 1
         helper_name = e.helper_name or ""
 
-        drv          = _all_drivers.get(e.driver_id) if e.driver_id else None
-        driver_name  = drv.name if drv else ""
+        drv         = _all_drivers.get(e.driver_id)  if e.driver_id  else None
+        driver_name = drv.name if drv else ""
 
         veh   = _all_vehicles.get(e.vehicle_id) if e.vehicle_id else None
         plate = veh.license_plate if veh else ""
 
-        km_awal = e.km_awal or ""
-        km_akhir = e.km_akhir or ""
+        # ── KM: priority expense → fallback TMSRoutePlan (dari driver app) ─────
+        km_awal_val  = e.km_awal
+        km_akhir_val = e.km_akhir
+        km_source    = "expense"
+
+        if (km_awal_val is None or km_akhir_val is None) and e.vehicle_id and e.date:
+            _rp = _route_plans.get((e.vehicle_id, e.date))
+            if _rp:
+                km_awal_val  = km_awal_val  or _rp.km_awal_trip
+                km_akhir_val = km_akhir_val or _rp.km_akhir_trip
+                if _rp.km_awal_trip or _rp.km_akhir_trip:
+                    km_source = "driver_app"
+
+        km_awal  = km_awal_val  or ""
+        km_akhir = km_akhir_val or ""
+
+        # ── RASIO: (km_akhir - km_awal) / (bbm / harga_per_liter) ────────────
+        # Menggunakan harga BBM dari system_settings — tidak hardcode
         rasio = ""
-        
-        if e.km_awal and e.km_akhir and e.bbm and e.bbm > 0:
-            jarak = e.km_akhir - e.km_awal
-            liter = round(e.bbm / _harga_bbm, 1)
-            if liter > 0:
-                rasio = round(jarak / liter, 1)
+        if km_awal_val and km_akhir_val and e.bbm and e.bbm > 0:
+            jarak = int(km_akhir_val) - int(km_awal_val)
+            liter = e.bbm / _harga_bbm
+            if liter > 0 and jarak >= 0:
+                rasio_val = round(jarak / liter, 1)
+                # Tandai dengan * kalau km dari driver app (bukan input kasir)
+                rasio = f"{rasio_val}*" if km_source == "driver_app" else rasio_val
 
         vals = [
             idx, driver_name, helper_name, plate,
@@ -405,9 +433,7 @@ async def parse_bop_excel(
             for hdr, field in HEADER_MAP.items():
                 if key == hdr:
                     col_map[field] = col_idx
-                    # Pakai max() agar header yang paling bawah yang menentukan baris data
-                    # (BOP punya multi-row header: row 3 kolom utama, row 4 sub-header biaya)
-                    data_start_row = max(data_start_row, row_idx + 1) if data_start_row else row_idx + 1
+                    data_start_row = row_idx + 1 
 
     if not col_map or not data_start_row:
         raise HTTPException(status_code=422, detail="Format Excel tidak dikenali. Pastikan header ada.")

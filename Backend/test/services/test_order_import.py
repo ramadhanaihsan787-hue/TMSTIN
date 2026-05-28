@@ -140,3 +140,4 @@ def test_process_sap_invalid_qty_skips_row():
         assert result is not None
     except Exception:
         pass  # Some implementations raise, that's fine as long as no silent corrupt
+        

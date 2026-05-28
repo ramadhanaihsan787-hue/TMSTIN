@@ -51,7 +51,14 @@ async def upload_sap_file(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
 ):
+    # Batas ukuran file upload (10 MB)
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024
     contents = await file.read()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File terlalu besar! Maksimal 10 MB, file kamu {len(contents) // (1024*1024)} MB."
+        )
     settings = get_settings()
     
     try:

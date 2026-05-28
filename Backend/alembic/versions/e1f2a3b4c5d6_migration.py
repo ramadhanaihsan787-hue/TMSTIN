@@ -1,13 +1,12 @@
-"""add_harga_bbm_to_system_settings
+"""add_harga_bbm_per_liter_to_system_settings
 
 Revision ID: e1f2a3b4c5d6
 Revises: d1e2f3a4b5c6
-Create Date: 2026-05-28 00:00:00.000000
+Create Date: 2026-05-29 00:00:00.000000
 
 Tambah kolom harga_bbm_per_liter (FLOAT) ke system_settings.
-Default Rp 12.500/liter (harga Pertalite saat ini).
-Admin dapat mengubah dari Settings page — kalkulasi rasio BBM di BOP export
-otomatis menggunakan nilai terbaru ini.
+Default Rp 12.500/liter (Pertalite). Admin dapat mengubah dari Settings page.
+Dipakai oleh bop-export untuk kalkulasi rasio km/liter yang akurat.
 """
 from typing import Sequence, Union
 from alembic import op
@@ -28,7 +27,6 @@ def upgrade() -> None:
             "system_settings",
             sa.Column("harga_bbm_per_liter", sa.Float(), nullable=True, server_default="12500.0")
         )
-        # Isi default untuk baris yang sudah ada
         op.execute("UPDATE system_settings SET harga_bbm_per_liter = 12500.0 WHERE harga_bbm_per_liter IS NULL")
 
 
