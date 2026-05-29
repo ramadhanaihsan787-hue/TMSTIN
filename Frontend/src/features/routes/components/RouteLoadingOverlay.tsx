@@ -56,7 +56,7 @@ export default function RouteLoadingOverlay({
                     <Map 
                         initialViewState={{ longitude: 106.82, latitude: -6.20, zoom: 10 }}
                         style={{ width: '100%', height: '100%' }}
-                        mapStyle="mapbox://styles/mapbox/dark-v11"
+                        mapStyle="mapbox://styles/mapbox/navigation-night-v1"
                         mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                         interactive={false} 
                     >

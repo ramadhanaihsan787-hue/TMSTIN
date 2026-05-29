@@ -9,7 +9,8 @@ VALID_ROLES = [
     "manager_logistik",
     "admin_distribusi",
     "admin_pod",
-    "driver"
+    "driver",
+    "kasir",        
 ]
 
 # ==========================================
@@ -37,24 +38,33 @@ VEHICLE_STATUSES = [
 # ==========================================
 # TIME WINDOWS (in minutes from 00:00)
 # ==========================================
-DEFAULT_DELIVERY_WINDOW_START = 6 * 60  # 06:00
-DEFAULT_DELIVERY_WINDOW_END = 20 * 60   # 20:00
+DEFAULT_DELIVERY_WINDOW_START = 6 * 60  
+DEFAULT_DELIVERY_WINDOW_END = 20 * 60   
 
 # ==========================================
 # STORE CLASSIFICATION KEYWORDS
 # ==========================================
 MALL_KEYWORDS = [
+    # Mall & pusat perbelanjaan
     'MALL',
     'PLAZA',
     'SQUARE',
     'FOOD HALL',
-    'SUPERMARKET',
     'ITC',
+    'SUPERMARKET',
     'HYPERMART',
     'AEON',
     'HERO',
     'TRANSMART',
     'LOTTE',
+    'GIANT',
+    'SUPERINDO',
+    'CARREFOUR',
+    'ALFAMART',
+    'INDOMARET',
+    'ALFAMIDI',
+    'CIRCLE K',
+    'LAWSON',
 ]
 
 # ==========================================

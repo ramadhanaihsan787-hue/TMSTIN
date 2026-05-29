@@ -15,6 +15,7 @@ from services.auth_service import AuthService
 from main import limiter  
 
 from core.config import env_settings
+from core.constants import VALID_ROLES  # [FIX] Single source of truth — tidak hardcode di sini
 
 router = APIRouter(tags=["Authentication"])
 
@@ -109,8 +110,8 @@ def register_user(
         require_role("admin_distribusi", "manager_logistik")
     )
 ):
-    VALID_ROLES = ["manager_logistik", "admin_distribusi", "admin_pod", "driver", "kasir"]
-    
+    # [FIX] VALID_ROLES diimport dari core/constants.py — tidak lagi hardcode di sini
+    # Sekarang 1 tempat untuk maintain daftar role yang valid
     if data.role not in VALID_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -149,7 +149,7 @@ export default function RouteMap({ routesData, selectedRouteId, truckColors = []
                 {...viewState} 
                 onMove={(e: any) => setViewState(e.viewState)} 
                 style={{ width: '100%', height: '100%' }} 
-                mapStyle="mapbox://styles/mapbox/dark-v11" 
+                mapStyle="mapbox://styles/mapbox/navigation-night-v1" 
                 mapboxAccessToken={MAPBOX_TOKEN}
             >
                 <Source id="geofence" type="geojson" data={geofenceGeoJSON as any}>

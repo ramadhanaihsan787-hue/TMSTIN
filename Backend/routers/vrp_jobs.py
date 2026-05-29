@@ -69,19 +69,30 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
                 return True
             return False
 
-        toko_tanpa_gps = [
-            order.order_id for order in pending_orders
-            if _koordinat_invalid(order)
-        ]
+        # Pisahkan toko valid vs toko tanpa koordinat
+        # Toko tanpa koordinat TIDAK membatalkan VRP — masuk dropped_nodes
+        orders_valid     = [o for o in pending_orders if not _koordinat_invalid(o)]
+        orders_no_coord  = [o for o in pending_orders if     _koordinat_invalid(o)]
 
-        if toko_tanpa_gps:
-            daftar_toko = ", ".join(toko_tanpa_gps[:5])
-            pesan_error = (
-                f"VRP dibatalkan! Ada {len(toko_tanpa_gps)} DO dengan koordinat GPS "
-                f"tidak valid (NULL, 0.0/0.0, atau di luar Indonesia). "
-                f"Contoh: {daftar_toko}. Silakan lengkapi koordinatnya terlebih dahulu."
+        if orders_no_coord:
+            nama_list = [
+                (o.customer.store_name if o.customer else o.order_id)
+                for o in orders_no_coord
+            ]
+            logger.warning(
+                f"⚠️ [VRP] {len(orders_no_coord)} toko tidak punya koordinat valid → "
+                f"di-skip dari routing: {', '.join(nama_list[:5])}"
+                f"{'...' if len(nama_list) > 5 else ''}"
             )
-            raise Exception(pesan_error)
+
+        if not orders_valid:
+            raise Exception(
+                "Tidak ada toko dengan koordinat valid. "
+                "Lengkapi koordinat toko di Customer Data terlebih dahulu."
+            )
+
+        # Pakai hanya order valid untuk VRP
+        pending_orders = orders_valid
         # =========================================================
 
         vehicles = db.query(models.FleetVehicle).filter(
@@ -247,12 +258,28 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
                 order = order_lookup[dropped_id]
                 store_name = order.customer.store_name if order.customer else "Toko"
                 spillover.append({
-                    "nama_toko": store_name,
-                    "berat_kg": float(order.weight_total),
-                    "alasan": "Drop VRP Global (Kapasitas Maksimal / Waktu Lembur Habis)",
-                    "lat": float(order.latitude),
-                    "lon": float(order.longitude),
+                    "nama_toko":   store_name,
+                    "kode_customer": order.customer.kode_customer if order.customer else None,
+                    "berat_kg":    float(order.weight_total),
+                    "alasan":      "Drop VRP Global (Kapasitas Maksimal / Waktu Lembur Habis)",
+                    "reason":      "capacity_overflow",
+                    "lat":         float(order.latitude),
+                    "lon":         float(order.longitude),
                 })
+
+        # Tambahkan toko tanpa koordinat ke spillover (selalu, di luar blok hasil)
+        for order in orders_no_coord:
+            store_name = order.customer.store_name if order.customer else order.order_id
+            kode       = order.customer.kode_customer if order.customer else None
+            spillover.append({
+                "nama_toko":     store_name,
+                "kode_customer": kode,
+                "berat_kg":      float(order.weight_total or 0),
+                "alasan":        "Koordinat belum tersedia — pin lokasi di peta",
+                "reason":        "no_coordinates",
+                "lat":           None,
+                "lon":           None,
+            })
 
         # Jika preview=False, hapus rute lama hari ini dari DB
         today = datetime.datetime.now().date()
@@ -281,9 +308,10 @@ def run_vrp_optimization_task(job_id: str, preview: bool):
                 "message": f"{'[PREVIEW] ' if preview else ''}{len(formatted_routes)} rute berhasil dibuat.",
                 "total_trucks": len(formatted_routes),
                 "total_orders": len(pending_orders),
-                "dropped_count": len(spillover),
-                "jadwal_truk_internal": formatted_routes,
-                "dropped_nodes_peta": spillover,
+                "dropped_count":           len(spillover),
+                "no_coord_count":          len(orders_no_coord),
+                "jadwal_truk_internal":    formatted_routes,
+                "dropped_nodes_peta":      spillover,
             },
         }
         logger.info(f"✅ [VRP] Job {job_id[:8]}... selesai — {len(formatted_routes)} rute, {len(spillover)} drop.")

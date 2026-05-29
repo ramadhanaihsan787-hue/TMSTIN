@@ -195,6 +195,55 @@ def update_customer(
 # ==========================================
 # ENDPOINT 5: SOFT DELETE
 # ==========================================
+@router.patch("/by-code/{kode_customer}/coordinate")
+def update_coordinate_by_code(
+    kode_customer: str,
+    lat: float,
+    lon: float,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Quick-save koordinat toko berdasarkan kode_customer.
+    Dipanggil saat admin pin lokasi toko di peta routing.
+    Otomatis update MasterCustomer sehingga berlaku untuk routing berikutnya.
+    """
+    # Validasi bounding box Indonesia
+    if not (-12.0 <= lat <= 7.0 and 94.0 <= lon <= 142.0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Koordinat ({lat}, {lon}) di luar bounding box Indonesia."
+        )
+
+    customer = db.query(models.MasterCustomer).filter(
+        models.MasterCustomer.kode_customer == kode_customer
+    ).first()
+
+    if not customer:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Toko dengan kode '{kode_customer}' tidak ditemukan."
+        )
+
+    customer.latitude  = lat
+    customer.longitude = lon
+    db.commit()
+
+    logger.info(
+        f"📍 Koordinat diupdate: {kode_customer} ({customer.store_name}) "
+        f"→ ({lat:.6f}, {lon:.6f}) oleh {current_user.username}"
+    )
+
+    return {
+        "status": "success",
+        "message": f"Koordinat {customer.store_name} berhasil disimpan.",
+        "kode_customer": kode_customer,
+        "store_name": customer.store_name,
+        "latitude": lat,
+        "longitude": lon,
+    }
+
+
 @router.delete("/{store_id}", response_model=schemas.CustomerActionResponse) # 🌟 SUNTIK SINI
 def deactivate_customer(
     store_id: int,

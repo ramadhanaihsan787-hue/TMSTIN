@@ -63,10 +63,54 @@ async def upload_sap_file(
     
     try:
         count, success_list, failed_list = order_import_service.process_sap_file(contents, file.filename, db, settings)
+
+        # Cek toko dari success_list yang tidak punya koordinat
+        # success_list berisi list of dict — extract langsung, hindari N+1 query ke DB
+        stores_without_coords = []
+        for item in success_list:
+            # Ambil dict item (bisa dict atau string tergantung versi)
+            if not isinstance(item, dict):
+                continue
+
+            kordinat = str(item.get('kordinat') or item.get('koordinat') or '').strip()
+            lat_val  = str(item.get('lat')      or '').strip()
+
+            # Dianggap tidak punya koordinat kalau kordinat kosong, '-', atau 'None'
+            has_coord = bool(
+                (kordinat and kordinat not in ('', '-', 'None', 'none', '0,0')) or
+                (lat_val  and lat_val  not in ('', '-', 'None', '0', '0.0'))
+            )
+
+            if not has_coord:
+                # Fallback: cek MasterCustomer di DB
+                kode = str(item.get('kode_customer') or '').strip()
+                if kode:
+                    cust = db.query(models.MasterCustomer).filter(
+                        models.MasterCustomer.kode_customer == kode
+                    ).first()
+                    if cust and cust.latitude and cust.longitude:
+                        has_coord = True  # MasterCustomer punya koordinat, skip
+
+            if not has_coord:
+                stores_without_coords.append({
+                    "order_id":      item.get('order_id'),
+                    "store_name":    item.get('nama_toko'),
+                    "kode_customer": item.get('kode_customer'),
+                })
+
         return {
-            "message": f"Upload selesai! {count} DO berhasil, {len(failed_list)} gagal.", 
-            "success_list": success_list, 
-            "failed_list": failed_list
+            "message": (
+                f"Upload selesai! {count} DO berhasil"
+                + (f", {len(failed_list)} gagal" if failed_list else "")
+                + (f". ⚠️ {len(stores_without_coords)} toko belum punya koordinat." if stores_without_coords else "")
+                + "."
+            ),
+            "success_count": count,
+            "success_list":  success_list,
+            "failed_list":   failed_list,
+            # Toko yang perlu di-pin sebelum bisa diikutkan VRP
+            "stores_without_coordinates": stores_without_coords,
+            "has_missing_coords": len(stores_without_coords) > 0,
         }
     except ValueError as ve:
         # Menangkap error validasi nilai data

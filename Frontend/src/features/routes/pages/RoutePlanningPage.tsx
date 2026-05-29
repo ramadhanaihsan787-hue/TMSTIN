@@ -19,6 +19,8 @@ import RouteDispatchModal from "../components/RouteDispatchModal";
 import SpilloverBasket from "../components/SpilloverBasket";
 
 import { useHeaderStore } from "../../../store/useHeaderStore";
+import { api } from '../../../shared/services/apiClient';
+import { fleetService } from '../../fleet/services/fleetService';
 
 export default function RoutePlanningPage() {
     const { setTitle } = useHeaderStore();
@@ -38,6 +40,14 @@ export default function RoutePlanningPage() {
     const [activeModal, setActiveModal] = useState<'cost' | 'distance' | 'fleet' | 'stops' | null>(null);
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [isGeneratingOnCall, setIsGeneratingOnCall] = useState(false);
+
+    // State untuk fleet panel dan koordinat
+    const [fleetForPanel, setFleetForPanel]       = useState<any[]>([]);
+    const [storesNoCoord,  setStoresNoCoord]       = useState<any[]>([]);
+    const [coordEditTarget, setCoordEditTarget]    = useState<any | null>(null);
+    const [coordPopupPos,   setCoordPopupPos]      = useState<{x:number,y:number} | null>(null);
+    const [isFleetPanelOpen, setIsFleetPanelOpen] = useState(true);
+    const [savingCoord, setSavingCoord]            = useState(false);
 
     const truckColors = [
         '#7f1d1d', '#1e3a5f', '#14532d', '#78350f', '#4c1d95', '#134e4a', '#7c2d12'
@@ -61,6 +71,62 @@ export default function RoutePlanningPage() {
     useEffect(() => {
         fetchRoutes(selectedDate);
     }, [selectedDate, fetchRoutes]);
+
+    // Load daftar armada untuk fleet panel
+    useEffect(() => {
+        api.get('/api/fleet').then(r => {
+            const raw = r.data?.data || r.data || [];
+            setFleetForPanel(Array.isArray(raw) ? raw : []);
+        }).catch(() => {});
+    }, []);
+
+    // Deteksi toko tanpa koordinat setelah upload
+    useEffect(() => {
+        const missingList = (uploadReport as any)?.stores_without_coordinates;
+        if (Array.isArray(missingList) && missingList.length > 0) {
+            setStoresNoCoord(missingList);
+            toast.warning(
+                `⚠️ ${missingList.length} toko belum punya koordinat — pin lokasi di peta sebelum optimasi.`,
+                { duration: 8000 }
+            );
+        }
+    }, [uploadReport]);
+
+    // Toggle status armada (Active ↔ Maintenance)
+    const handleToggleFleetStatus = async (vehicleId: string | number, currentStatus: string) => {
+        const newStatus = currentStatus === 'Available' ? 'Maintenance' : 'Available';
+        try {
+            await fleetService.updateStatus(vehicleId, newStatus);
+            setFleetForPanel(prev => prev.map(t =>
+                (t.id || t.vehicle_id) === vehicleId ? { ...t, status: newStatus } : t
+            ));
+            toast.success(`Armada ${newStatus === 'Available' ? 'diaktifkan' : 'di-set Maintenance'}`);
+        } catch {
+            toast.error('Gagal update status armada');
+        }
+    };
+
+    // Simpan koordinat toko yang di-pin admin
+    const handleSaveCoordinate = async (lat: number, lon: number) => {
+        if (!coordEditTarget) return;
+        setSavingCoord(true);
+        try {
+            await api.patch(
+                `/api/customers/by-code/${coordEditTarget.kode_customer}/coordinate`,
+                null, { params: { lat, lon } }
+            );
+            setStoresNoCoord(prev =>
+                prev.filter(s => s.kode_customer !== coordEditTarget.kode_customer)
+            );
+            toast.success(`📍 Koordinat ${coordEditTarget.store_name} berhasil disimpan!`);
+            setCoordEditTarget(null);
+            setCoordPopupPos(null);
+        } catch {
+            toast.error('Gagal menyimpan koordinat');
+        } finally {
+            setSavingCoord(false);
+        }
+    };
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -158,6 +224,54 @@ export default function RoutePlanningPage() {
                         </div>
 
                         <div className="flex-1 relative bg-slate-100 dark:bg-[#0a0a0a]">
+
+                            {/* ── Warning banner toko tanpa koordinat ── */}
+                            {storesNoCoord.length > 0 && (
+                                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-amber-500/95 backdrop-blur text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-bold max-w-md">
+                                    <span className="material-symbols-outlined text-[18px]">location_off</span>
+                                    <span>
+                                        {storesNoCoord.length} toko belum punya koordinat — klik marker
+                                        <span className="inline-block w-3 h-3 rounded-full bg-red-400 border border-white mx-1 animate-pulse align-middle"></span>
+                                        untuk pin lokasi
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* ── Popup set koordinat ── */}
+                            {coordEditTarget && (
+                                <div className="absolute top-3 right-3 z-20 bg-[#1a1c1e]/95 backdrop-blur border border-amber-500/60 rounded-xl p-4 shadow-xl max-w-xs">
+                                    <div className="flex items-start justify-between gap-2 mb-3">
+                                        <div>
+                                            <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Set Koordinat</p>
+                                            <p className="text-sm font-bold text-white mt-0.5">{coordEditTarget.store_name}</p>
+                                            <p className="text-xs text-slate-400">{coordEditTarget.kode_customer}</p>
+                                        </div>
+                                        <button onClick={() => { setCoordEditTarget(null); setCoordPopupPos(null); }}
+                                            className="text-slate-400 hover:text-white p-0.5">
+                                            <span className="material-symbols-outlined text-[18px]">close</span>
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-300 bg-slate-800/60 rounded-lg p-2 mb-3">
+                                        <span className="material-symbols-outlined text-[14px] align-middle mr-1 text-amber-400">touch_app</span>
+                                        Klik pada peta untuk menetapkan lokasi toko ini
+                                    </p>
+                                    {coordPopupPos && (
+                                        <div className="text-xs text-slate-300 font-mono bg-slate-800/40 rounded p-2 mb-3">
+                                            {coordPopupPos.y.toFixed(6)}, {coordPopupPos.x.toFixed(6)}
+                                        </div>
+                                    )}
+                                    {coordPopupPos && (
+                                        <button
+                                            onClick={() => handleSaveCoordinate(coordPopupPos.y, coordPopupPos.x)}
+                                            disabled={savingCoord}
+                                            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                        >
+                                            {savingCoord ? '⏳ Menyimpan...' : '📍 Simpan Koordinat'}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             <Map
                                 initialViewState={{
                                     longitude: 106.86,
@@ -167,9 +281,16 @@ export default function RoutePlanningPage() {
                                     bearing: 0
                                 }}
                                 style={{ width: '100%', height: '100%' }}
-                                mapStyle="mapbox://styles/mapbox/dark-v11"
+                                mapStyle="mapbox://styles/mapbox/navigation-night-v1"
                                 mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                                cursor={coordEditTarget ? 'crosshair' : 'grab'}
+                                onClick={(e) => {
+                                    if (coordEditTarget) {
+                                        setCoordPopupPos({ x: e.lngLat.lng, y: e.lngLat.lat });
+                                    }
+                                }}
                             >
+                                {/* Zona warna per area */}
                                 <Source id="static-zones" type="geojson" data={{
                                     type: 'FeatureCollection',
                                     features: zoningData?.map((zone: any, i: number) => ({
@@ -181,35 +302,115 @@ export default function RoutePlanningPage() {
                                         }
                                     }))
                                 } as any}>
-                                    <Layer
-                                        id="static-zones-fill"
-                                        type="fill"
-                                        paint={{
-                                            'fill-color': ['get', 'color'],
-                                            'fill-opacity': 0.13
-                                        }}
-                                    />
-                                    <Layer
-                                        id="static-zones-line"
-                                        type="line"
-                                        paint={{
-                                            'line-color': ['get', 'color'],
-                                            'line-width': 1.8,
-                                            'line-opacity': 0.45,
-                                            'line-dasharray': [2, 3]
-                                        }}
-                                    />
+                                    <Layer id="static-zones-fill" type="fill"
+                                        paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.13 }} />
+                                    <Layer id="static-zones-line" type="line"
+                                        paint={{ 'line-color': ['get', 'color'], 'line-width': 1.8,
+                                                 'line-opacity': 0.45, 'line-dasharray': [2, 3] }} />
                                 </Source>
 
+                                {/* Marker toko valid (dari zoning) */}
                                 {zoningData?.map((zone: any, i: number) => {
                                     const color = truckColors[i % truckColors.length];
                                     return zone.stores?.map((store: any, j: number) => (
                                         <Marker key={`z${i}-s${j}`} longitude={store.lon || store.lng} latitude={store.lat} anchor="center">
-                                            <div className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" style={{ backgroundColor: color }}></div>
+                                            <div className="w-3.5 h-3.5 rounded-full border-2 border-white/80 shadow-[0_0_6px_rgba(255,255,255,0.6)]"
+                                                 style={{ backgroundColor: color }}></div>
                                         </Marker>
                                     ));
                                 })}
+
+                                {/* Marker toko TANPA koordinat — merah berkedip, bisa di-klik */}
+                                {storesNoCoord.map((store: any, i: number) => {
+                                    // Tampilkan di posisi depot sebagai placeholder visual
+                                    // (koordinat sebenarnya belum ada, pakai posisi kota sebagai fallback)
+                                    return (
+                                        <Marker key={`nocoord-${i}`} longitude={106.65} latitude={-6.21 - i * 0.03} anchor="center">
+                                            <div
+                                                className="relative cursor-pointer group"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setCoordEditTarget(store);
+                                                    setCoordPopupPos(null);
+                                                }}
+                                                title={`${store.store_name} — klik untuk set koordinat`}
+                                            >
+                                                {/* Pulse ring */}
+                                                <div className="absolute -inset-2 rounded-full bg-red-500/30 animate-ping"></div>
+                                                {/* Ikon */}
+                                                <div className="w-6 h-6 rounded-full bg-red-500 border-2 border-white shadow-lg flex items-center justify-center">
+                                                    <span className="material-symbols-outlined text-[12px] text-white">question_mark</span>
+                                                </div>
+                                                {/* Tooltip nama toko */}
+                                                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                    {store.store_name}
+                                                </div>
+                                            </div>
+                                        </Marker>
+                                    );
+                                })}
                             </Map>
+
+                            {/* ── Fleet Status Panel (overlay kanan bawah) ── */}
+                            <div className="absolute bottom-4 right-4 z-10">
+                                <div className={`bg-[#1a1c1e]/92 backdrop-blur border border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${isFleetPanelOpen ? 'w-72' : 'w-12'}`}>
+
+                                    {/* Header panel */}
+                                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10">
+                                        {isFleetPanelOpen && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary text-[16px]">local_shipping</span>
+                                                <span className="text-xs font-bold text-white uppercase tracking-wider">Armada Hari Ini</span>
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => setIsFleetPanelOpen(p => !p)}
+                                            className="ml-auto text-slate-400 hover:text-white p-0.5 rounded"
+                                        >
+                                            <span className="material-symbols-outlined text-[18px]">
+                                                {isFleetPanelOpen ? 'chevron_right' : 'local_shipping'}
+                                            </span>
+                                        </button>
+                                    </div>
+
+                                    {/* List armada */}
+                                    {isFleetPanelOpen && (
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {fleetForPanel.length === 0 ? (
+                                                <p className="text-xs text-slate-500 text-center py-4">Memuat armada...</p>
+                                            ) : fleetForPanel.map((truck: any) => {
+                                                const vid    = truck.id || truck.vehicle_id;
+                                                const plate  = truck.licensePlate || truck.license_plate || truck.plate || '-';
+                                                const driver = truck.driverName || truck.driver_name || '—';
+                                                const isActive = truck.status === 'Available';
+                                                return (
+                                                    <div key={vid} className={`flex items-center gap-2 px-3 py-2 border-b border-white/5 last:border-0 ${!isActive ? 'opacity-50' : ''}`}>
+                                                        {/* Status dot */}
+                                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
+                                                        {/* Info */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-bold text-white truncate">{plate}</p>
+                                                            <p className="text-[10px] text-slate-400 truncate">{driver}</p>
+                                                        </div>
+                                                        {/* Toggle button */}
+                                                        <button
+                                                            onClick={() => handleToggleFleetStatus(vid, truck.status)}
+                                                            className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                                                                isActive
+                                                                    ? 'bg-emerald-500/20 text-emerald-400 hover:bg-red-500/20 hover:text-red-400'
+                                                                    : 'bg-slate-700 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400'
+                                                            }`}
+                                                            title={isActive ? 'Set Maintenance' : 'Aktifkan'}
+                                                        >
+                                                            {isActive ? 'Aktif' : 'Maint.'}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

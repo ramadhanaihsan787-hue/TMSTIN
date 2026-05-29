@@ -454,7 +454,7 @@ export default function RoutePreviewModal({
                             {...viewState}
                             onMove={(e: any) => setViewState(e.viewState)}
                             style={{ width: '100%', height: '100%' }}
-                            mapStyle="mapbox://styles/mapbox/dark-v11"
+                            mapStyle="mapbox://styles/mapbox/navigation-night-v1"
                             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                         >
                             {/* Zona background polygon */}
@@ -1001,7 +1001,14 @@ export default function RoutePreviewModal({
                                                     <span className="material-symbols-outlined text-[12px] text-red-400">drag_indicator</span>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-[10px] font-bold text-red-200 truncate">{store.nama_toko}</p>
-                                                        <p className="text-[9px] text-red-400">{store.berat_kg} KG</p>
+                                                        {(store as any).reason === 'no_coordinates' ? (
+                                                            <p className="text-[9px] text-amber-400 flex items-center gap-0.5 font-bold">
+                                                                <span className="material-symbols-outlined text-[9px]">location_off</span>
+                                                                Belum ada koordinat
+                                                            </p>
+                                                        ) : (
+                                                            <p className="text-[9px] text-red-400">{store.berat_kg} KG</p>
+                                                        )}
                                                     </div>
                                                     <div className="flex gap-0.5 shrink-0">
                                                         {draftData.jadwal_truk_internal?.map((truk: any, ti: number) => {
