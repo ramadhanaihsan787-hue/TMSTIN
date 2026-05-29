@@ -172,8 +172,8 @@ export default function RoutePreviewModal({
                 type: 'Feature',
                 properties: {
                     color,
-                    opacity: isActive ? 1.0 : 0.08,
-                    width: activeTruck === i ? 5 : 3,
+                    opacity: isActive ? 1.0 : 0.25,
+                    width: activeTruck === i ? 6 : 4,
                     glowOpacity: isActive ? (activeTruck === i ? 0.55 : 0.18) : 0,
                 },
                 geometry: { type: 'LineString', coordinates: coords },
@@ -460,10 +460,10 @@ export default function RoutePreviewModal({
                             {/* Zona background polygon */}
                             <Source id="zones-preview" type="geojson" data={JAPFA_ZONES_GEOJSON as any}>
                                 <Layer id="zones-fill" type="fill"
-                                    paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 }} />
+                                    paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.08 }} />
                                 <Layer id="zones-line" type="line"
-                                    paint={{ 'line-color': ['get', 'color'], 'line-width': 1.5,
-                                             'line-opacity': 0.6, 'line-dasharray': [4, 4] }} />
+                                    paint={{ 'line-color': ['get', 'color'], 'line-width': 1.2,
+                                             'line-opacity': 0.45, 'line-dasharray': [3, 3] }} />
                             </Source>
 
                             {/* Garis rute — glow layer */}
@@ -481,8 +481,7 @@ export default function RoutePreviewModal({
                                     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
                                     paint={{ 'line-color': ['get', 'color'],
                                              'line-width': ['get', 'width'],
-                                             'line-opacity': ['get', 'opacity'],
-                                             'line-dasharray': [2, 1.5] }} />
+                                             'line-opacity': ['get', 'opacity'] }} />
                             </Source>
 
                             {/* Depot marker */}

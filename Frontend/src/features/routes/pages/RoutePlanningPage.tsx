@@ -51,7 +51,14 @@ export default function RoutePlanningPage() {
     const [savingCoord, setSavingCoord]            = useState(false);
 
     const truckColors = [
-        '#7f1d1d', '#1e3a5f', '#14532d', '#78350f', '#4c1d95', '#134e4a', '#7c2d12'
+        // Warna terang & vivid — kontras tinggi di basemap navigation-night
+        '#ef4444', // merah terang
+        '#3b82f6', // biru terang
+        '#22c55e', // hijau terang
+        '#f59e0b', // oranye/amber
+        '#a855f7', // ungu
+        '#14b8a6', // teal
+        '#ec4899', // pink
     ];
 
     // 🌟 SINKRONISASI: Ambil zonesData dari useRoutes
@@ -373,8 +380,8 @@ export default function RoutePlanningPage() {
                                 <tbody>
                                     {safeRoutesData.map((route: any, i: number) => (
                                         <tr key={i} className="border-b border-slate-100 dark:border-[#222] last:border-0 hover:bg-slate-50 dark:hover:bg-[#2A2A2A]">
-                                            <td className="py-3 font-bold dark:text-white">{route.kendaraan || '-'}</td>
-                                            <td className="py-3 text-slate-600 dark:text-slate-300">{route.driver_name || '-'}</td>
+                                            <td className="py-3 font-bold dark:text-white">{route.vehicle || route.kendaraan || route.plateNumber || '-'}</td>
+                                            <td className="py-3 text-slate-600 dark:text-slate-300">{route.driverName || route.driver_name || '-'}</td>
                                             {activeModal === 'cost' && <td className="py-3 text-right font-mono text-emerald-600">Rp {((route.transportCost || route.transport_cost || ((route.totalDistanceKm || route.total_distance_km || 0) * 2500))).toLocaleString('id-ID')}</td>}
                                             {activeModal === 'distance' && <td className="py-3 text-right font-mono text-blue-500">{route.totalDistanceKm || route.total_distance_km || '0'} KM</td>}
                                             {activeModal === 'fleet' && <td className="py-3 text-right text-slate-500">{route.jenis || route.truck_type || '-'}</td>}

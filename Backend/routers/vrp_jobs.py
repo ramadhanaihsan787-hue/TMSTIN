@@ -392,26 +392,50 @@ def trigger_spatial_preview(preview: bool = True):
     """
     db = SessionLocal()
     try:
+        # Include do_verified DAN so_waiting_verification — admin bisa preview
+        # setelah upload tanpa harus verifikasi manual dulu
         pending_orders = db.query(models.DeliveryOrder).filter(
-            models.DeliveryOrder.status == models.DOStatus.do_verified
+            models.DeliveryOrder.status.in_([
+                models.DOStatus.do_verified,
+                models.DOStatus.so_waiting_verification,
+            ])
         ).all()
 
         if not pending_orders:
             raise HTTPException(
                 status_code=400,
-                detail="Tidak ada Delivery Order terverifikasi untuk dipetakan!"
+                detail="Tidak ada Delivery Order untuk dipetakan. Upload file SAP terlebih dahulu."
             )
 
         locations_input = []
         for order in pending_orders:
+            # Skip toko tanpa koordinat valid (tidak crash zoning service)
+            try:
+                lat_f = float(order.latitude or 0)
+                lon_f = float(order.longitude or 0)
+            except (TypeError, ValueError):
+                continue
+            if lat_f == 0.0 or lon_f == 0.0:
+                continue
+            if not (-12.0 <= lat_f <= 7.0 and 94.0 <= lon_f <= 142.0):
+                continue
+
             store_name = order.customer.store_name if order.customer else "Toko"
+            kode       = order.customer.kode_customer if order.customer else None
             locations_input.append({
-                "lat": float(order.latitude),
-                "lon": float(order.longitude),
+                "lat":      lat_f,
+                "lon":      lon_f,
                 "nama_toko": store_name,
+                "kode_customer": kode,
                 "order_id": order.order_id,
-                "weight": float(order.weight_total),
+                "weight":   float(order.weight_total or 0),
             })
+
+        if not locations_input:
+            raise HTTPException(
+                status_code=400,
+                detail="Semua Delivery Order belum memiliki koordinat GPS. Lengkapi koordinat toko terlebih dahulu."
+            )
 
         zones_data = zoning_service.generate_spatial_zones(locations_input, num_zones=7)
         return {"status": "success", "data": zones_data}

@@ -85,7 +85,7 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
         >
             {/* Header */}
             <div className="flex justify-between items-center">
-                <span className="font-bold text-slate-800 dark:text-white text-lg tracking-tight">TRK-{String(id).padStart(3, '0')}</span>
+                <span className="font-bold text-slate-800 dark:text-white text-lg tracking-tight">{licensePlate && licensePlate !== '-' ? licensePlate : `TRK-${String(id).padStart(3, '0')}`}</span>
                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border ${badgeBg}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${badgeDot}`}></span> {statusText}
                 </span>

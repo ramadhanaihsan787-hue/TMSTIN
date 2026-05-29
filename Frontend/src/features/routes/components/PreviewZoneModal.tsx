@@ -64,7 +64,7 @@ export default function PreviewZoneModal({
         zoningData?.forEach((zone: any, i: number) => {
             const color = truckColors[i % truckColors.length];
             zone.stores?.forEach((store: any) => {
-                stores.push({ ...store, color, zoneName: zone.zone_name || `Zone ${i+1}` });
+                stores.push({ ...store, color, zoneName: zone.zone_name || zone.name || `Zona ${i+1}` });
             });
         });
         return stores;
@@ -74,18 +74,18 @@ export default function PreviewZoneModal({
         if (!searchQuery.trim()) return [];
         const q = searchQuery.toLowerCase();
         return allStores.filter(s => 
-            s.store_name?.toLowerCase().includes(q) || 
-            s.kode_customer?.toLowerCase().includes(q)
+            (s.store_name || s.nama_toko || '').toLowerCase().includes(q) || 
+            (s.kode_customer || s.kode || '').toLowerCase().includes(q)
         ).slice(0, 5); // Limit 5
     }, [searchQuery, allStores]);
 
     const zoneSummary = useMemo(() => {
         return zoningData?.map((zone: any, i: number) => {
             const storeCount = zone.stores?.length || 0;
-            const totalWeight = zone.stores?.reduce((sum: number, store: any) => sum + (store.volume || 0), 0) || 0;
+            const totalWeight = zone.stores?.reduce((sum: number, store: any) => sum + (store.volume || store.weight || store.berat_kg || 0), 0) || 0;
             return {
                 id: zone.zone_id || i,
-                name: zone.zone_name || `Zona ${i+1}`,
+                name: zone.zone_name || zone.name || `Zona ${i+1}`,
                 color: truckColors[i % truckColors.length],
                 storeCount,
                 totalWeight
@@ -319,7 +319,7 @@ export default function PreviewZoneModal({
                                             <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-[#161616]/95 backdrop-blur-sm border border-white/10 p-2.5 rounded-lg shadow-xl z-20 pointer-events-none w-[170px]">
                                                 <h3 className="font-bold text-[11px] text-white uppercase truncate mb-1" style={{ borderLeft: `3px solid ${color}`, paddingLeft: '6px' }}>{store.store_name}</h3>
                                                 <div className="flex items-center justify-between pl-[9px]">
-                                                    <span className="text-[9px] font-mono text-slate-400">{store.kode_customer || store.store_code || '-'}</span>
+                                                    <span className="text-[9px] font-mono text-slate-400">{store.kode_customer || store.kode || store.store_code || '-'}</span>
                                                     {store.volume > 0 && <span className="text-[10px] font-black text-white bg-white/10 px-1.5 py-0.5 rounded">{store.volume} KG</span>}
                                                 </div>
                                             </div>
@@ -377,14 +377,14 @@ export default function PreviewZoneModal({
                                     <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-2 pr-6">
                                         <div className="w-3.5 h-3.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)] border border-white/50 shrink-0" style={{ backgroundColor: hoverInfo.color }}></div>
                                         <div className="min-w-0">
-                                            <h3 className="font-black text-[12px] text-white uppercase tracking-wide truncate">{hoverInfo.store_name}</h3>
-                                            <p className="text-[9px] font-mono text-slate-400">{hoverInfo.kode_customer || hoverInfo.store_code || '-'}</p>
+                                            <h3 className="font-black text-[12px] text-white uppercase tracking-wide truncate">{hoverInfo.store_name || hoverInfo.nama_toko}</h3>
+                                            <p className="text-[9px] font-mono text-slate-400">{hoverInfo.kode_customer || hoverInfo.kode || hoverInfo.store_code || hoverInfo.order_id || '-'}</p>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <p className="text-[10px] text-slate-300 flex items-start gap-1.5 leading-tight">
                                             <span className="material-symbols-outlined text-[12px] text-primary shrink-0">location_on</span>
-                                            <span className="line-clamp-2" title={hoverInfo.alamat}>{hoverInfo.alamat || 'Alamat tidak tersedia'}</span>
+                                            <span className="line-clamp-2" title={hoverInfo.alamat || hoverInfo.address}>{hoverInfo.alamat || hoverInfo.address || `${hoverInfo.kode_customer || hoverInfo.kode || ''} · ${hoverInfo.zoneName || ''}`}</span>
                                         </p>
                                         <div className="flex items-center justify-between pt-1 border-t border-white/5 mt-2">
                                             <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
@@ -392,7 +392,7 @@ export default function PreviewZoneModal({
                                                 Muatan:
                                             </p>
                                             <span className="text-[11px] font-black text-white bg-white/10 px-1.5 py-0.5 rounded">
-                                                {hoverInfo.volume > 0 ? `${hoverInfo.volume} KG` : '0 KG'}
+                                                {(hoverInfo.volume || hoverInfo.weight || hoverInfo.berat_kg || 0) > 0 ? `${hoverInfo.volume || hoverInfo.weight || hoverInfo.berat_kg} KG` : '0 KG'}
                                             </span>
                                         </div>
                                     </div>
@@ -430,7 +430,7 @@ export default function PreviewZoneModal({
                                         <p className="text-xs text-slate-500 text-center py-4">Memuat armada...</p>
                                     ) : fleetForPanel.map((truck: any) => {
                                         const vid    = truck.id || truck.vehicle_id;
-                                        const plate  = truck.licensePlate || truck.license_plate || truck.plate || '-';
+                                        const plate  = truck.licensePlate || truck.license_plate || truck.plateNumber || truck.plate || '-';
                                         const driver = truck.driverName || truck.driver_name || '—';
                                         const isActive = truck.status === 'Available';
                                         return (

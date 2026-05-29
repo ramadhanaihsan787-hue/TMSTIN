@@ -15,7 +15,7 @@ export default function FleetTableRow({ truck, idx, isSelected, onSelect }: Flee
             className={`hover:bg-slate-50 dark:hover:bg-[#1a1a1a] transition-colors cursor-pointer ${isSelected ? 'bg-primary/5 dark:bg-primary/10' : ''}`}
         >
             <td className={`px-6 py-4 font-bold ${isSelected ? 'text-primary' : 'text-[#111] dark:text-slate-300'}`}>
-                TRK-{String(truck.id).padStart(3, '0')}
+                {truck.licensePlate && truck.licensePlate !== '-' ? truck.licensePlate : `TRK-${String(truck.id).padStart(3, '0')}`}
             </td>
             <td className="px-6 py-4 text-sm font-bold text-[#111] dark:text-white">{truck.model}</td>
             <td className="px-6 py-4 text-sm font-bold text-[#111] dark:text-white">{truck.licensePlate}</td>

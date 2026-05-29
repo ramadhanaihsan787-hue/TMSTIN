@@ -39,7 +39,7 @@ export default function FleetDetailPanel({
                         <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Telematics Connected</span>
                     </div>
                     <h4 className="text-2xl font-black text-[#111] dark:text-white leading-none mb-1">
-                        TRK-{String(selectedTruck.id).padStart(3, '0')}
+                        {selectedTruck.licensePlate && selectedTruck.licensePlate !== '-' ? selectedTruck.licensePlate : `TRK-${String(selectedTruck.id).padStart(3, '0')}`}
                     </h4>
                     <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
                         {selectedTruck.licensePlate} • {selectedTruck.model}
