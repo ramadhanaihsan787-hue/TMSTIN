@@ -17,6 +17,7 @@ import UploadVerificationModal from "../components/UploadVerificationModal";
 import RoutePreviewModal from "../components/RoutePreviewModal";
 import RouteDispatchModal from "../components/RouteDispatchModal";
 import SpilloverBasket from "../components/SpilloverBasket";
+import PreviewZoneModal from '../components/PreviewZoneModal';
 
 import { useHeaderStore } from "../../../store/useHeaderStore";
 import { api } from '../../../shared/services/apiClient';
@@ -206,214 +207,23 @@ export default function RoutePlanningPage() {
 
             {/* PREVIEW ZONA MODAL */}
             {optimizationPhase === 'preview_zone' && (
-                <div className="fixed inset-0 z-[999999] bg-slate-900/90 backdrop-blur-sm flex flex-col p-4 md:p-8">
-                    <div className="bg-white dark:bg-[#111] flex-1 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-                        <div className="p-4 md:p-6 border-b border-slate-200 dark:border-[#333] flex justify-between items-center bg-slate-50 dark:bg-[#1A1A1A]">
-                            <div>
-                                <h2 className="text-xl md:text-2xl font-black uppercase text-slate-800 dark:text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">map</span> PREVIEW ZONA TERITORI JAPFA
-                                </h2>
-                                <p className="text-xs font-bold text-slate-500 mt-1">Peta Dasar Operasional JAPFA. Pin toko akan menyesuaikan rute di dalam batas zona ini.</p>
-                            </div>
-                            <div className="flex gap-3">
-                                <button onClick={() => setOptimizationPhase('idle')} className="px-4 py-2 border-2 border-slate-200 dark:border-[#444] text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-100 dark:hover:bg-[#333] transition-colors">Batal</button>
-                                <button onClick={() => runAIOptimization()} className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black rounded-xl hover:brightness-110 flex items-center gap-2 shadow-lg shadow-teal-500/30 transition-all hover:scale-105">
-                                    LANJUT HITUNG RUTE <span className="material-symbols-outlined">smart_toy</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 relative bg-slate-100 dark:bg-[#0a0a0a]">
-
-                            {/* ── Warning banner toko tanpa koordinat ── */}
-                            {storesNoCoord.length > 0 && (
-                                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-amber-500/95 backdrop-blur text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-bold max-w-md">
-                                    <span className="material-symbols-outlined text-[18px]">location_off</span>
-                                    <span>
-                                        {storesNoCoord.length} toko belum punya koordinat — klik marker
-                                        <span className="inline-block w-3 h-3 rounded-full bg-red-400 border border-white mx-1 animate-pulse align-middle"></span>
-                                        untuk pin lokasi
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* ── Popup set koordinat ── */}
-                            {coordEditTarget && (
-                                <div className="absolute top-3 right-3 z-20 bg-[#1a1c1e]/95 backdrop-blur border border-amber-500/60 rounded-xl p-4 shadow-xl max-w-xs">
-                                    <div className="flex items-start justify-between gap-2 mb-3">
-                                        <div>
-                                            <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Set Koordinat</p>
-                                            <p className="text-sm font-bold text-white mt-0.5">{coordEditTarget.store_name}</p>
-                                            <p className="text-xs text-slate-400">{coordEditTarget.kode_customer}</p>
-                                        </div>
-                                        <button onClick={() => { setCoordEditTarget(null); setCoordPopupPos(null); }}
-                                            className="text-slate-400 hover:text-white p-0.5">
-                                            <span className="material-symbols-outlined text-[18px]">close</span>
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-slate-300 bg-slate-800/60 rounded-lg p-2 mb-3">
-                                        <span className="material-symbols-outlined text-[14px] align-middle mr-1 text-amber-400">touch_app</span>
-                                        Klik pada peta untuk menetapkan lokasi toko ini
-                                    </p>
-                                    {coordPopupPos && (
-                                        <div className="text-xs text-slate-300 font-mono bg-slate-800/40 rounded p-2 mb-3">
-                                            {coordPopupPos.y.toFixed(6)}, {coordPopupPos.x.toFixed(6)}
-                                        </div>
-                                    )}
-                                    {coordPopupPos && (
-                                        <button
-                                            onClick={() => handleSaveCoordinate(coordPopupPos.y, coordPopupPos.x)}
-                                            disabled={savingCoord}
-                                            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
-                                        >
-                                            {savingCoord ? '⏳ Menyimpan...' : '📍 Simpan Koordinat'}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            <Map
-                                initialViewState={{
-                                    longitude: 106.86,
-                                    latitude: -6.33,
-                                    zoom: 8.9,
-                                    pitch: 0,
-                                    bearing: 0
-                                }}
-                                style={{ width: '100%', height: '100%' }}
-                                mapStyle="mapbox://styles/mapbox/navigation-night-v1"
-                                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-                                cursor={coordEditTarget ? 'crosshair' : 'grab'}
-                                onClick={(e) => {
-                                    if (coordEditTarget) {
-                                        setCoordPopupPos({ x: e.lngLat.lng, y: e.lngLat.lat });
-                                    }
-                                }}
-                            >
-                                {/* Zona warna per area */}
-                                <Source id="static-zones" type="geojson" data={{
-                                    type: 'FeatureCollection',
-                                    features: zoningData?.map((zone: any, i: number) => ({
-                                        type: 'Feature',
-                                        properties: { zone_id: zone.zone_id, color: truckColors[i % truckColors.length] },
-                                        geometry: {
-                                            type: 'Polygon',
-                                            coordinates: ensureValidPolygonCoords(zone.bounding_polygon || zone.coordinates)
-                                        }
-                                    }))
-                                } as any}>
-                                    <Layer id="static-zones-fill" type="fill"
-                                        paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.13 }} />
-                                    <Layer id="static-zones-line" type="line"
-                                        paint={{ 'line-color': ['get', 'color'], 'line-width': 1.8,
-                                                 'line-opacity': 0.45, 'line-dasharray': [2, 3] }} />
-                                </Source>
-
-                                {/* Marker toko valid (dari zoning) */}
-                                {zoningData?.map((zone: any, i: number) => {
-                                    const color = truckColors[i % truckColors.length];
-                                    return zone.stores?.map((store: any, j: number) => (
-                                        <Marker key={`z${i}-s${j}`} longitude={store.lon || store.lng} latitude={store.lat} anchor="center">
-                                            <div className="w-3.5 h-3.5 rounded-full border-2 border-white/80 shadow-[0_0_6px_rgba(255,255,255,0.6)]"
-                                                 style={{ backgroundColor: color }}></div>
-                                        </Marker>
-                                    ));
-                                })}
-
-                                {/* Marker toko TANPA koordinat — merah berkedip, bisa di-klik */}
-                                {storesNoCoord.map((store: any, i: number) => {
-                                    // Tampilkan di posisi depot sebagai placeholder visual
-                                    // (koordinat sebenarnya belum ada, pakai posisi kota sebagai fallback)
-                                    return (
-                                        <Marker key={`nocoord-${i}`} longitude={106.65} latitude={-6.21 - i * 0.03} anchor="center">
-                                            <div
-                                                className="relative cursor-pointer group"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setCoordEditTarget(store);
-                                                    setCoordPopupPos(null);
-                                                }}
-                                                title={`${store.store_name} — klik untuk set koordinat`}
-                                            >
-                                                {/* Pulse ring */}
-                                                <div className="absolute -inset-2 rounded-full bg-red-500/30 animate-ping"></div>
-                                                {/* Ikon */}
-                                                <div className="w-6 h-6 rounded-full bg-red-500 border-2 border-white shadow-lg flex items-center justify-center">
-                                                    <span className="material-symbols-outlined text-[12px] text-white">question_mark</span>
-                                                </div>
-                                                {/* Tooltip nama toko */}
-                                                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                                    {store.store_name}
-                                                </div>
-                                            </div>
-                                        </Marker>
-                                    );
-                                })}
-                            </Map>
-
-                            {/* ── Fleet Status Panel (overlay kanan bawah) ── */}
-                            <div className="absolute bottom-4 right-4 z-10">
-                                <div className={`bg-[#1a1c1e]/92 backdrop-blur border border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${isFleetPanelOpen ? 'w-72' : 'w-12'}`}>
-
-                                    {/* Header panel */}
-                                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10">
-                                        {isFleetPanelOpen && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-primary text-[16px]">local_shipping</span>
-                                                <span className="text-xs font-bold text-white uppercase tracking-wider">Armada Hari Ini</span>
-                                            </div>
-                                        )}
-                                        <button
-                                            onClick={() => setIsFleetPanelOpen(p => !p)}
-                                            className="ml-auto text-slate-400 hover:text-white p-0.5 rounded"
-                                        >
-                                            <span className="material-symbols-outlined text-[18px]">
-                                                {isFleetPanelOpen ? 'chevron_right' : 'local_shipping'}
-                                            </span>
-                                        </button>
-                                    </div>
-
-                                    {/* List armada */}
-                                    {isFleetPanelOpen && (
-                                        <div className="max-h-64 overflow-y-auto">
-                                            {fleetForPanel.length === 0 ? (
-                                                <p className="text-xs text-slate-500 text-center py-4">Memuat armada...</p>
-                                            ) : fleetForPanel.map((truck: any) => {
-                                                const vid    = truck.id || truck.vehicle_id;
-                                                const plate  = truck.licensePlate || truck.license_plate || truck.plate || '-';
-                                                const driver = truck.driverName || truck.driver_name || '—';
-                                                const isActive = truck.status === 'Available';
-                                                return (
-                                                    <div key={vid} className={`flex items-center gap-2 px-3 py-2 border-b border-white/5 last:border-0 ${!isActive ? 'opacity-50' : ''}`}>
-                                                        {/* Status dot */}
-                                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
-                                                        {/* Info */}
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-xs font-bold text-white truncate">{plate}</p>
-                                                            <p className="text-[10px] text-slate-400 truncate">{driver}</p>
-                                                        </div>
-                                                        {/* Toggle button */}
-                                                        <button
-                                                            onClick={() => handleToggleFleetStatus(vid, truck.status)}
-                                                            className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                                                                isActive
-                                                                    ? 'bg-emerald-500/20 text-emerald-400 hover:bg-red-500/20 hover:text-red-400'
-                                                                    : 'bg-slate-700 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400'
-                                                            }`}
-                                                            title={isActive ? 'Set Maintenance' : 'Aktifkan'}
-                                                        >
-                                                            {isActive ? 'Aktif' : 'Maint.'}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <PreviewZoneModal
+                    onCancel={() => setOptimizationPhase('idle')}
+                    onProceed={() => runAIOptimization()}
+                    storesNoCoord={storesNoCoord}
+                    zoningData={zoningData}
+                    truckColors={truckColors}
+                    fleetForPanel={fleetForPanel}
+                    isFleetPanelOpen={isFleetPanelOpen}
+                    setIsFleetPanelOpen={setIsFleetPanelOpen}
+                    handleToggleFleetStatus={handleToggleFleetStatus}
+                    coordEditTarget={coordEditTarget}
+                    setCoordEditTarget={setCoordEditTarget}
+                    coordPopupPos={coordPopupPos}
+                    setCoordPopupPos={setCoordPopupPos}
+                    handleSaveCoordinate={handleSaveCoordinate}
+                    savingCoord={savingCoord}
+                />
             )}
 
             {/* PREVIEW RUTE MODAL */}

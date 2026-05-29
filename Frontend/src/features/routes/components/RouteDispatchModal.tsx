@@ -123,98 +123,148 @@ export default function RouteDispatchModal({ draftData, onBack, onConfirmSave, i
     if (isLoadingData) return <div className="fixed inset-0 z-[9999999] bg-slate-900/90 flex items-center justify-center"><div className="animate-spin text-white">Loading Data...</div></div>;
 
     return (
-        <div className="fixed inset-0 z-[9999999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#111] rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[9999999] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 md:p-6 lg:p-10">
+            <div className="bg-white dark:bg-[#111] rounded-[2rem] shadow-2xl w-full max-w-[1600px] h-[90vh] max-h-[900px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-[#333] relative">
                 
-                <div className="p-6 border-b border-slate-200 dark:border-[#333] flex justify-between items-center bg-slate-50 dark:bg-[#1A1A1A]">
-                    <div>
-                        <h2 className="text-2xl font-black uppercase text-slate-800 dark:text-white flex items-center gap-2">
-                            <span className="material-symbols-outlined text-primary">engineering</span> Penugasan Kru & Armada
-                        </h2>
-                        <p className="text-sm font-medium text-slate-500 mt-1">Pilih Truk, Supir, dan Helper untuk setiap rute. Data sinkron dengan Fleet Management.</p>
-                    </div>
-                    <button onClick={onBack} className="p-2 hover:bg-slate-200 dark:hover:bg-[#333] rounded-xl text-slate-500 transition-colors">
-                        <span className="material-symbols-outlined">close</span>
-                    </button>
-                </div>
+                {/* DECORATIVE TOP BAR */}
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-400 via-primary to-orange-600 z-50"></div>
 
-                <div className="p-6 overflow-y-auto max-h-[65vh] bg-slate-50 dark:bg-[#0A0A0A] space-y-4">
-                    {draftData.jadwal_truk_internal.map((truk: any, idx: number) => {
-                        const availableDrivers = getAvailableDrivers(idx);
-                        const availableHelpers = getAvailableHelpers(idx);
-                        const availableFleets = getAvailableFleets(idx);
+                <div className="px-6 md:px-10 py-6 md:py-8 border-b border-slate-200/80 dark:border-[#222] flex justify-between items-start md:items-center bg-gradient-to-br from-orange-50/50 to-white dark:from-[#1A110B] dark:to-[#111] flex-col md:flex-row gap-4 md:gap-0 relative overflow-hidden">
+                    <div className="absolute -top-32 -left-32 w-64 h-64 bg-primary/20 rounded-full blur-[80px] pointer-events-none"></div>
 
-                        return (
-                            <div key={idx} className="bg-white dark:bg-[#1F1F1F] border border-slate-200 dark:border-[#333] rounded-xl p-5 flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-primary transition-colors">
-                                
-                                {/* 🌟 SEKARANG TRUK BISA DIPILIH (DROPDOWN) */}
-                                <div className="flex-1 w-full flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-[#222] border-2 border-slate-200 dark:border-[#444] flex items-center justify-center shrink-0">
-                                        <span className="material-symbols-outlined text-slate-400">local_shipping</span>
-                                    </div>
-                                    <div className="w-full">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Armada Truk</label>
-                                        <select 
-                                            value={assignments[idx]?.armada || ""} 
-                                            onChange={(e) => handleAssign(idx, 'armada', e.target.value)}
-                                            className="w-full bg-slate-50 dark:bg-[#111] border border-slate-200 dark:border-[#444] rounded-lg px-3 py-1.5 text-base font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary outline-none"
-                                        >
-                                            <option value={truk.armada}>{truk.armada} (Bawaan Sistem)</option>
-                                            {availableFleets.map(f => (
-                                                <option key={f.id} value={f.plateNumber} disabled={f.disabled}>
-                                                    {f.plateNumber} • {f.model} • {f.capacity} KG
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p className="text-[11px] font-bold text-slate-500 mt-1">{truk.total_muatan_kg.toFixed(1)} KG • {truk.detail_perjalanan.length - 2} Titik Drop</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
-                                    <div className="flex flex-col gap-1 w-full sm:w-48">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Supir Utama</label>
-                                        <select 
-                                            value={assignments[idx]?.driver_id || ""} 
-                                            onChange={(e) => handleAssign(idx, 'driver_id', parseInt(e.target.value))}
-                                            className="w-full bg-slate-50 dark:bg-[#111] border border-slate-200 dark:border-[#444] rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                                        >
-                                            <option value={0} disabled>Pilih Supir...</option>
-                                            {availableDrivers.map(d => (
-                                                <option key={d.id} value={d.id} disabled={d.disabled}>
-                                                    {d.name} {d.disabled ? '(Dipakai)' : ''}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    
-                                    <div className="flex flex-col gap-1 w-full sm:w-48">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Helper (Knek)</label>
-                                        <select 
-                                            value={assignments[idx]?.helper_id || ""} 
-                                            onChange={(e) => handleAssign(idx, 'helper_id', parseInt(e.target.value))}
-                                            className="w-full bg-slate-50 dark:bg-[#111] border border-slate-200 dark:border-[#444] rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                                        >
-                                            <option value={9999}>Tanpa Helper</option>
-                                            {availableHelpers.map(h => (
-                                                <option key={h.id} value={h.id} disabled={h.disabled}>
-                                                    {h.name} {h.disabled ? '(Dipakai)' : ''}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
+                    <div className="relative z-10">
+                        <h2 className="text-2xl md:text-4xl font-black text-slate-800 dark:text-white flex items-center gap-4">
+                            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-primary to-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/40 ring-4 ring-primary/20">
+                                <span className="material-symbols-outlined text-3xl md:text-4xl">engineering</span>
                             </div>
-                        );
-                    })}
+                            <span className="tracking-tight">PENUGASAN KRU & ARMADA</span>
+                        </h2>
+                        <p className="text-sm md:text-base font-medium text-slate-500 mt-3 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary text-lg">info</span>
+                            Pilih Truk, Supir, dan Helper untuk setiap rute. Data akan otomatis disinkronisasi dengan Fleet Management.
+                        </p>
+                    </div>
+                    <button onClick={onBack} className="p-3 bg-white dark:bg-[#222] border border-slate-200 dark:border-[#444] shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-[#333] hover:text-red-500 rounded-xl text-slate-500 transition-all active:scale-95 self-end md:self-auto relative z-10 group">
+                        <span className="material-symbols-outlined group-hover:rotate-90 transition-transform duration-300">close</span>
+                    </button>
                 </div>
 
-                <div className="p-6 border-t border-slate-200 dark:border-[#333] bg-white dark:bg-[#1A1A1A] flex justify-end gap-3">
-                    <button onClick={onBack} disabled={isSaving} className="px-6 py-3 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#333] rounded-xl transition-colors">
-                        Kembali ke Peta
+                <div className="p-6 md:p-10 flex-1 overflow-y-auto bg-slate-50/50 dark:bg-[#080808] space-y-6 relative">
+                    {/* Background Pattern */}
+                    <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+
+                    <div className="relative z-10 space-y-6">
+                        {draftData.jadwal_truk_internal.map((truk: any, idx: number) => {
+                            const availableDrivers = getAvailableDrivers(idx);
+                            const availableHelpers = getAvailableHelpers(idx);
+                            const availableFleets = getAvailableFleets(idx);
+
+                            return (
+                                <div key={idx} className="bg-white dark:bg-[#141414] border border-slate-200/80 dark:border-[#222] rounded-3xl p-6 md:p-8 flex flex-col shadow-sm hover:shadow-2xl hover:shadow-primary/10 hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 relative overflow-hidden group">
+                                    {/* Accent Line */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-slate-200 dark:bg-[#2A2A2A] group-hover:bg-primary transition-colors duration-300"></div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full items-center pl-2">
+                                        
+                                        {/* ARMADA TRUK */}
+                                        <div className="lg:col-span-6 flex items-start sm:items-center gap-5 sm:gap-6 flex-col sm:flex-row">
+                                            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-50 dark:bg-[#1C1C1C] border border-slate-100 dark:border-[#333] flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 group-hover:bg-orange-50 dark:group-hover:bg-primary/10 transition-all duration-300">
+                                                <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 text-4xl group-hover:text-primary transition-colors duration-300">local_shipping</span>
+                                            </div>
+                                            <div className="w-full">
+                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block flex items-center gap-2">
+                                                    <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-[#444] group-hover:bg-primary transition-colors"></span> 
+                                                    Armada Truk
+                                                </label>
+                                                <div className="relative">
+                                                    <select 
+                                                        value={assignments[idx]?.armada || ""} 
+                                                        onChange={(e) => handleAssign(idx, 'armada', e.target.value)}
+                                                        className="w-full bg-slate-50 dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#333] rounded-xl pl-4 pr-10 py-3 md:py-3.5 text-base md:text-lg font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary outline-none appearance-none transition-all hover:border-primary/50 shadow-sm cursor-pointer"
+                                                    >
+                                                        <option value={truk.armada}>{truk.armada} (Bawaan Sistem)</option>
+                                                        {availableFleets.map(f => (
+                                                            <option key={f.id} value={f.plateNumber} disabled={f.disabled}>
+                                                                {f.plateNumber} • {f.model} • {f.capacity} KG
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 bg-white dark:bg-[#222] rounded-md flex items-center justify-center pointer-events-none shadow-sm border border-slate-100 dark:border-[#444]">
+                                                        <span className="material-symbols-outlined text-sm text-slate-500">expand_more</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-2 mt-3">
+                                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-[#222] border border-slate-200 dark:border-[#333] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                                                        <span className="material-symbols-outlined text-[14px]">weight</span>
+                                                        {truk.total_muatan_kg.toFixed(1)} KG Muatan
+                                                    </span>
+                                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-[#222] border border-slate-200 dark:border-[#333] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                                                        <span className="material-symbols-outlined text-[14px]">pin_drop</span>
+                                                        {truk.detail_perjalanan.length - 2} Titik Drop
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* SUPIR UTAMA */}
+                                        <div className="lg:col-span-3 flex flex-col gap-2 w-full">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5 block flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-sm text-slate-300 dark:text-[#555] group-hover:text-primary transition-colors">person</span>
+                                                Supir Utama
+                                            </label>
+                                            <div className="relative group/select">
+                                                <select 
+                                                    value={assignments[idx]?.driver_id || ""} 
+                                                    onChange={(e) => handleAssign(idx, 'driver_id', parseInt(e.target.value))}
+                                                    className="w-full bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#333] rounded-xl pl-4 pr-10 py-3 md:py-3.5 text-sm md:text-base font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none appearance-none transition-all hover:border-primary/50 shadow-sm cursor-pointer"
+                                                >
+                                                    <option value={0} disabled>Pilih Supir...</option>
+                                                    {availableDrivers.map(d => (
+                                                        <option key={d.id} value={d.id} disabled={d.disabled}>
+                                                            {d.name} {d.disabled ? '(Dipakai)' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover/select:text-primary transition-colors">arrow_drop_down</span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* HELPER */}
+                                        <div className="lg:col-span-3 flex flex-col gap-2 w-full">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5 block flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-sm text-slate-300 dark:text-[#555] group-hover:text-primary transition-colors">group</span>
+                                                Helper (Knek)
+                                            </label>
+                                            <div className="relative group/select">
+                                                <select 
+                                                    value={assignments[idx]?.helper_id || ""} 
+                                                    onChange={(e) => handleAssign(idx, 'helper_id', parseInt(e.target.value))}
+                                                    className="w-full bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#333] rounded-xl pl-4 pr-10 py-3 md:py-3.5 text-sm md:text-base font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none appearance-none transition-all hover:border-primary/50 shadow-sm cursor-pointer"
+                                                >
+                                                    <option value={9999}>Tanpa Helper</option>
+                                                    {availableHelpers.map(h => (
+                                                        <option key={h.id} value={h.id} disabled={h.disabled}>
+                                                            {h.name} {h.disabled ? '(Dipakai)' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover/select:text-primary transition-colors">arrow_drop_down</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="px-6 md:px-10 py-5 md:py-6 border-t border-slate-200/80 dark:border-[#222] bg-white dark:bg-[#161616] flex flex-col-reverse md:flex-row justify-end gap-3 md:gap-4 items-center relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
+                    <button onClick={onBack} disabled={isSaving} className="w-full md:w-auto px-8 py-4 font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#222] hover:bg-slate-200 dark:hover:bg-[#333] border border-slate-200 dark:border-[#333] rounded-xl transition-all hover:-translate-y-0.5">
+                        Kembali
                     </button>
-                    <button onClick={handleSave} disabled={isSaving} className="px-8 py-3 bg-primary text-white font-black rounded-xl hover:brightness-110 flex items-center gap-2 shadow-lg shadow-primary/30 transition-all active:scale-95 disabled:opacity-50">
-                        {isSaving ? <span className="material-symbols-outlined animate-spin">sync</span> : <span className="material-symbols-outlined">send</span>}
-                        SIMPAN & BERANGKATKAN!
+                    <button onClick={handleSave} disabled={isSaving} className="w-full md:w-auto px-10 py-4 bg-gradient-to-r from-primary to-orange-500 text-white font-black rounded-xl hover:brightness-110 hover:shadow-xl hover:shadow-primary/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:scale-100">
+                        {isSaving ? <span className="material-symbols-outlined animate-spin text-2xl">sync</span> : <span className="material-symbols-outlined text-2xl">rocket_launch</span>}
+                        <span className="text-lg tracking-wide uppercase">Simpan & Berangkatkan!</span>
                     </button>
                 </div>
 

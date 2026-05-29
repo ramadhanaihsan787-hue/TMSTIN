@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 
 from utils.helpers import time_str_to_minutes
 from services import vrp_solver
-from services.zoning_service import _kmeans_clustering  # K-Means sudah ada, tidak perlu scikit-learn
+from services.zoning_service import _cluster_by_polygon
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +50,10 @@ class VRPService:
         num_vehicles: int,
     ) -> Optional[List[List[int]]]:
         """
-        Fase 1 dari Hybrid Architecture: K-Means Clustering → Initial Routes.
+        Fase 1 dari Hybrid Architecture: Polygon Clustering → Initial Routes.
 
-        Gunakan _kmeans_clustering() dari zoning_service yang sudah ada
-        (anchor-based K-Means dengan 7 anchor poin Jabodetabek kustom JAPFA).
-        Tidak perlu scikit-learn — implementasi custom sudah tepat untuk geo-clustering.
+        Gunakan _cluster_by_polygon() dari zoning_service yang sudah ada
+        (strict point-in-polygon dengan 7 puzzle Jabodetabek kustom JAPFA).
 
         Flow:
             coordinates[0]     = depot
@@ -69,8 +68,7 @@ class VRPService:
         if n_stores <= 0 or num_vehicles <= 1:
             return None
 
-        # Format yang diharapkan _kmeans_clustering: list of {'lat', 'lon', '_node_idx'}
-        # _node_idx: kita simpan untuk mapping balik ke node index OR-Tools
+        # Format yang diharapkan _cluster_by_polygon: list of {'lat', 'lon', '_node_idx'}
         store_locs = [
             {'lat': float(lat), 'lon': float(lon), '_node_idx': idx}
             for idx, (lat, lon) in enumerate(coordinates)
@@ -80,9 +78,9 @@ class VRPService:
         k = min(num_vehicles, n_stores)
 
         try:
-            clusters = _kmeans_clustering(store_locs, k, max_iters=25)
+            clusters = _cluster_by_polygon(store_locs, k)
         except Exception as exc:
-            logger.warning(f"⚠️ K-Means gagal: {exc} — lanjut tanpa warm start")
+            logger.warning(f"⚠️ Clustering gagal: {exc} — lanjut tanpa warm start")
             return None
 
         # Pad jadi tepat num_vehicles routes (rute kosong untuk truk yang tidak butuh load)
@@ -97,7 +95,7 @@ class VRPService:
         filled = sum(1 for r in warm_start if r)
         total_assigned = sum(len(r) for r in warm_start)
         logger.info(
-            f"🗺️ K-Means Warm Start: {n_stores} toko → "
+            f"🗺️ Polygon Warm Start: {n_stores} toko → "
             f"{filled} zona aktif | {total_assigned} toko ter-assign ke {num_vehicles} truk"
         )
         return warm_start
