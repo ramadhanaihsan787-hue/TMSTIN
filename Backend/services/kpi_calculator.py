@@ -112,6 +112,28 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
     completed_percent = round((completed_qty_kg / today_target_kg) * 100, 1) if today_target_kg > 0 else 0.0
     in_transit_percent = 100.0 - completed_percent if today_target_kg > 0 else 0.0
 
+    # 🌟 CALCULATE 7-DAYS TREND FOR OVERVIEW DASHBOARD
+    otif_trend = []
+    volume_trend = []
+    now = datetime.now()
+    for i in range(6, -1, -1):
+        target_date = now.date() - timedelta(days=i)
+        
+        # Volume = total weight planned that day
+        rutes_day = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == target_date).all()
+        day_volume = 0.0
+        for r in rutes_day:
+            day_volume += sum([float(line.order.weight_total) for line in r.route_lines if line.order and line.order.weight_total and line.sequence > 0])
+        volume_trend.append(round(day_volume))
+
+        # OTIF (Success Rate) that day
+        epods_day = db.query(models.TMSEpodHistory).filter(
+            func.date(models.TMSEpodHistory.timestamp) == target_date
+        ).all()
+        day_success = sum(1 for e in epods_day if e.status in [models.DOStatus.delivered_success, models.DOStatus.delivered_partial])
+        day_otif = round((day_success / len(epods_day)) * 100) if len(epods_day) > 0 else 0
+        otif_trend.append(day_otif)
+
     return {
         "status": "success",
         "success_rate_percent": success_rate, 
@@ -131,7 +153,9 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
         "completed_drops": completed_drops,
         "in_transit_qty": round(today_remaining_kg, 1),
         "in_transit_percent": in_transit_percent,
-        "in_transit_drops": in_transit_drops
+        "in_transit_drops": in_transit_drops,
+        "otifTrend": otif_trend,
+        "volumeTrend": volume_trend
     }
 
 def get_efficiency_dashboard(db: Session, settings):

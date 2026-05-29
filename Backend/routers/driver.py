@@ -223,7 +223,8 @@ def get_my_route(
 def update_stop_status(
     line_id: int,
     payload: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     line = db.query(models.TMSRouteLine).filter(models.TMSRouteLine.line_id == line_id).first()
     if not line:
@@ -543,7 +544,8 @@ def get_today_active_dispatch(
             
         return {"status": "success", "data": dispatches}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in get_today_active_dispatch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan internal. Silakan hubungi admin.")
 
 # ==========================================
 # 6. JEMBATAN UNTUK ANALYTICS (PERFORMA SUPIR)
@@ -575,4 +577,5 @@ def get_driver_performance(
         
         return {"status": "success", "data": performance_data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in get_driver_performance: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan internal. Silakan hubungi admin.")

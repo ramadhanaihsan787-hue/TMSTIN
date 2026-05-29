@@ -28,7 +28,10 @@ export default function OverviewDashboard() {
         estCompletion: "--:--",
         completionPeriod: "",
         riskLevel: "N/A",
-        riskColor: "text-gray-500"
+        riskColor: "text-gray-500",
+        
+        otifTrend: [0, 0, 0, 0, 0, 0, 0],
+        volumeTrend: [0, 0, 0, 0, 0, 0, 0]
     });
 
     const [isLoading, setIsLoading] = useState(true);
@@ -91,6 +94,9 @@ export default function OverviewDashboard() {
                         completionPeriod: "",
                         riskLevel:        ov.risk_level            || "N/A",
                         riskColor:        autoRiskColor,
+                        
+                        otifTrend:        kpi?.otifTrend || [0,0,0,0,0,0,0],
+                        volumeTrend:      kpi?.volumeTrend || [0,0,0,0,0,0,0]
                     });
                 }
             } catch (error) {
@@ -109,6 +115,15 @@ export default function OverviewDashboard() {
         if (num >= 1000) return `${(num / 1000).toFixed(1)} rb`;
         return num.toString();
     };
+
+    // 🌟 KALKULASI GRAFIK SVG DINAMIS
+    const maxVolume = Math.max(1, ...kpiData.volumeTrend);
+    const scaleVolume = (vol: number) => (vol / maxVolume) * 280; // max height 280
+    // Scale OTIF: 95% di y=150. (Setiap 1% naik, y turun 20px). Clamped 0-300.
+    const scaleOtif = (val: number) => Math.max(0, Math.min(300, 150 - (val - 95) * 20));
+    
+    const otifPoints = kpiData.otifTrend.map((val, i) => ({ x: 100 + i * 130, y: scaleOtif(val) }));
+    const pathD = "M " + otifPoints.map(p => `${p.x},${p.y}`).join(" L ");
 
     return (
         <div className={`space-y-8 animate-fadeIn transition-opacity duration-500 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
@@ -259,18 +274,29 @@ export default function OverviewDashboard() {
                     </div>
                 </div>
 
-                {/* SVG Chart ASLI Temen Lu (Dibiarkan Static Sementara) */}
+                {/* SVG Chart DINAMIS DARI API */}
                 <div className="relative w-full h-[300px] mb-4">
                     <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
+                        {/* Grid lines */}
                         {[0, 60, 120, 180, 240, 300].map((y) => (
                             <line key={y} x1="0" x2="1000" y1={y} y2={y} stroke="currentColor" className="text-gray-100 dark:text-white/5" strokeDasharray="4" />
                         ))}
+                        {/* 95% Target Line at Y=150 */}
                         <line x1="0" x2="1000" y1="150" y2="150" stroke="#ef4444" strokeDasharray="6,4" strokeWidth="2" />
-                        {[200, 240, 280, 180, 260, 220, 290].map((h, i) => (
-                            <rect key={i} x={80 + i * 130} y={300 - h} width="40" height={h} fill="currentColor" className="text-orange-100 dark:text-orange-500/20 rounded-t-sm" />
-                        ))}
-                        <path d="M 100,200 C 150,200 180,160 230,160 C 280,160 310,120 360,120 C 410,120 440,220 490,220 C 540,220 570,110 620,110 C 670,110 700,140 750,140 C 800,140 830,90 880,90" fill="none" stroke="#F28C38" strokeWidth="4" />
-                        {[ { x: 100, y: 200 }, { x: 230, y: 160 }, { x: 360, y: 120 }, { x: 490, y: 220 }, { x: 620, y: 110 }, { x: 750, y: 140 }, { x: 880, y: 90 } ].map((p, i) => (
+                        
+                        {/* Bar Chart: Shipment Volume */}
+                        {kpiData.volumeTrend.map((vol, i) => {
+                            const h = scaleVolume(vol);
+                            return (
+                                <rect key={i} x={80 + i * 130} y={300 - h} width="40" height={h} fill="currentColor" className="text-orange-100 dark:text-orange-500/20 rounded-t-sm" />
+                            );
+                        })}
+                        
+                        {/* Line Chart: OTIF Performance */}
+                        <path d={pathD} fill="none" stroke="#F28C38" strokeWidth="4" />
+                        
+                        {/* Points for Line Chart */}
+                        {otifPoints.map((p, i) => (
                             <circle key={i} cx={p.x} cy={p.y} r="5" fill="white" stroke="#F28C38" strokeWidth="2" />
                         ))}
                     </svg>

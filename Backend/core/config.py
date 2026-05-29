@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     APP_DESCRIPTION: str = "Transport Management System dengan CVRPTW Optimization"
     DEBUG: bool = False
+    
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
 
     TOMTOM_API_KEY: Optional[str] = None
     traffic_validation_enabled: bool = True

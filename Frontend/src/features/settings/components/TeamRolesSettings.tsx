@@ -1,7 +1,7 @@
 // src/features/settings/components/TeamRolesSettings.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../../../shared/services/apiClient';
 
-// Data Dummy Temen Lu (Nanti kita ganti narik dari API kalau udah siap)
 interface Member {
     id: number;
     name: string;
@@ -12,18 +12,38 @@ interface Member {
     avatar: string;
 }
 
-const members: Member[] = [
-    { id: 1, name: 'Alex Thompson', email: 'alex.t@japfalogix.com', role: 'Logistics Admin', status: 'Active', lastLogin: '2 mins ago', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzBK1dj32GiR9dVI74_Jt3_gZ25myA61Mdr9ICIpMe_so3EJlxwSj1wg1SDZjJGl3oERSn2udSprfTxz7qEiu5Cs9ty1DnK138Cwl4OoeL9NJdhH882Lqs6CN9VR1_xlmYZ763QpPLFHJ6b9aeErS5BQR_E5XC70pwYIURGoCt36IWWPVDvQyFfHHUArfAd16E_-1nIqfGK63VGY35_DCF8KD9E-rP-BRi4Wbe1Ef--igNpLHxhB5tpNhrxi6xukI4OgMhYsTtQp8' },
-    { id: 2, name: 'Sarah Jenkins', email: 's.jenkins@japfalogix.com', role: 'POD Admin', status: 'Active', lastLogin: 'Yesterday, 4:20 PM', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAUflcqMWXvJHd7uV7aHWjzjSEaW-Vo9xLTtZWmL6G4GSXcdXDPzZF3_eQ-xS0o8jOk2OKY9idN7UkU7f8OR2RyIKV9t0LgV3LMb9YwuKcvGp5QGTA3VxGW9pb6zAqpc_yIdnDKzs1mteLPLVrfG60GUlSrAYIDyebGGpEdxinDuAxnlmvw5vL-OGbwDJEoFdX40JXwE2Eu4aPdRnoDn2KqnVEDR73IuRvBDSlWLPdsGv2jQ0PHnistNsVYBQgbGS6mnas0kxZlCU8' },
-    { id: 3, name: 'Marcus Vane', email: 'm.vane@japfalogix.com', role: 'Driver (Tier 1)', status: 'Inactive', lastLogin: '3 days ago', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAMwAHSiqJbN0qfk_cUudQboUcoEoCS--lH4nwHF99BF8FSDB2CWvtt6kFyqyss3jzpUfeLImsB8sGbI1YLpYN3vQE58Xwr13dqbvtfzJLzpRn_CNHgvsE90pIp-atvTjfT8EtdhQ2TamakwX26nWsTMGG0Dwt6IZeeNfGqRvzDTrJv2kD5957FAHZEBpijfOz7K76xn6OeSQ9131xjJqWmx4mMnq_bz-BqXaRT83JdyijiTghHdzZlUyFME' },
-    { id: 4, name: 'David Chen', email: 'd.chen@japfalogix.com', role: 'Dispatcher', status: 'Active', lastLogin: '1 hour ago', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDtOelL6SnN4mx0F3pELrOqyhCIUl8BIPEt1cKnSpyr_CMo3Wp6XMu2CVD5j29k-SHjuE6S-ppL-BDHIy1gMxMYkj98-LZGpTlkYLl611HmNJPIElDXJ5SUdrzfJLUDfpgnBwyfUQOvKW_ntYxpUspQEWbY43qk2n9QYgXe24cqE3YfG6B7T9Tjw6FvxXCyOj9W8YdNB7jA8hBM9SGgX3Hvu_l88UHpAOXMcaElqV4ixY9JiMqLbm0-0t9h75bdjZTqzd3dBR9IB_E' },
-];
-
 export default function TeamRolesSettings() {
     const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+    const [members, setMembers] = useState<Member[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMembers = async () => {
+            try {
+                const response = await api.get('/auth/users');
+                if (response.data?.status === 'success') {
+                    const mapped = response.data.data.map((u: any) => ({
+                        id: u.user_id,
+                        name: u.full_name || u.username,
+                        email: `${u.username}@japfalogix.com`,
+                        role: u.role.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                        status: 'Active',
+                        lastLogin: 'Recently',
+                        avatar: ''
+                    }));
+                    setMembers(mapped);
+                }
+            } catch (error) {
+                console.error("Gagal load users:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchMembers();
+    }, []);
 
     return (
-        <div className="animate-fadeIn space-y-8 pb-10">
+        <div className={`animate-fadeIn space-y-8 pb-10 transition-opacity duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
                 <div>

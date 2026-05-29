@@ -4,6 +4,7 @@ import { useDateRange } from '../../context/DateRangeContext';
 import { useState, useEffect, useRef } from 'react';
 import { Calendar, Check, X, Headset } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import { api } from '../services/apiClient';
 
 export default function Header({ title }: { title?: string }) {
     const location = useLocation();
@@ -15,14 +16,29 @@ export default function Header({ title }: { title?: string }) {
     const notificationRef = useRef<HTMLDivElement>(null);
     const [localStartDate, setLocalStartDate] = useState(startDate);
     const [localEndDate, setLocalEndDate] = useState(endDate);
+    const [notifications, setNotifications] = useState<any[]>([]);
 
-    // Mock notifications
-    const notifications = [
-        { id: 1, title: "New Route Assigned", time: "2 mins ago", type: "info", icon: "route" },
-        { id: 2, title: "Vehicle Maintenance Alert", time: "1 hour ago", type: "warning", icon: "settings_alert" },
-        { id: 3, title: "Delivery Delayed - #JKT001", time: "3 hours ago", type: "error", icon: "warning" },
-        { id: 4, title: "New Message from Driver", time: "5 hours ago", type: "message", icon: "chat" },
-    ];
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            try {
+                const response = await api.get('/analytics/monitoring-alerts');
+                if (response.data?.status === 'success') {
+                    const mapped = response.data.data.map((alert: any, idx: number) => ({
+                        id: idx,
+                        title: alert.title,
+                        time: alert.time,
+                        type: alert.severity === 'critical' ? 'error' : alert.severity,
+                        icon: alert.icon,
+                        desc: alert.desc
+                    }));
+                    setNotifications(mapped);
+                }
+            } catch (error) {
+                console.error("Gagal load notifications:", error);
+            }
+        };
+        fetchNotifications();
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -164,7 +180,7 @@ export default function Header({ title }: { title?: string }) {
                                 <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
                                     <div className="p-4 border-b border-gray-50 dark:border-white/5 flex items-center justify-between">
                                         <h4 className="text-xs font-black text-japfa-dark dark:text-white uppercase tracking-widest">Notifications</h4>
-                                        <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-full">4 New</span>
+                                        {notifications.length > 0 && <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-full">{notifications.length} New</span>}
                                     </div>
                                     <div className="max-h-[350px] overflow-y-auto">
                                         {notifications.map((notif) => (
@@ -177,7 +193,8 @@ export default function Header({ title }: { title?: string }) {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{notif.title}</p>
-                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{notif.time}</p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{notif.desc}</p>
+                                                    <p className="text-[9px] font-bold text-japfa-orange mt-1 uppercase tracking-widest">{notif.time}</p>
                                                 </div>
                                             </div>
                                         ))}
