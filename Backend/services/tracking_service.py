@@ -27,6 +27,17 @@ def process_gps_webhook(db: Session, vehicle_id: int, current_lat: float, curren
     settings = db.query(models.SystemSettings).first()
     radius_batas = settings.geofence_radius_meters if settings else 200
 
+    # ── VALIDASI KOORDINAT GPS ───────────────────────────────────────────────
+    # Tolak koordinat 0,0 (GPS belum fix) dan di luar bounding box Indonesia
+    _LAT_MIN, _LAT_MAX = -12.0,  7.0    # Indonesia
+    _LON_MIN, _LON_MAX = 94.0,  142.0
+    if (current_lat == 0.0 and current_lon == 0.0) or        not (_LAT_MIN <= current_lat <= _LAT_MAX) or        not (_LON_MIN <= current_lon <= _LON_MAX):
+        logger.debug(
+            f"⚠️ GPS invalid/di luar Indonesia: lat={current_lat}, lon={current_lon}. Ping diabaikan."
+        )
+        return {"status": "ignored", "msg": "Koordinat GPS tidak valid atau di luar area operasional"}
+    # ─────────────────────────────────────────────────────────────────────────
+
     # 1. Cari Rute Truk Aktif
     active_route = db.query(models.TMSRoutePlan).filter(
         models.TMSRoutePlan.vehicle_id == vehicle_id,

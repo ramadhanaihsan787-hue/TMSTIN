@@ -179,7 +179,11 @@ def get_my_route(
     for line in lines:
         order = line.order
         status_fe = "pending"
-        if order.status in [models.DOStatus.delivered_success, models.DOStatus.delivered_partial]:
+        if order.status in [
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial,
+            models.DOStatus.delivered_pod_uploaded,  # foto sudah dikirim, menunggu review
+        ]:
             status_fe = "completed"
             completed_count += 1
         elif order.status == models.DOStatus.do_assigned_to_route:
@@ -309,7 +313,11 @@ async def submit_epod(
         # Bandingkan GPS driver dengan koordinat toko dari master/order.
         # Kalau di luar radius → flag anomali & update actual_lat/lng toko.
         # Tidak memblokir submission (cold chain tidak boleh delay).
-        if gps_lat != 0.0 and gps_lon != 0.0:
+        _gps_ok = (
+            gps_lat != 0.0 and gps_lon != 0.0 and
+            -12.0 <= gps_lat <= 7.0 and 94.0 <= gps_lon <= 142.0
+        )
+        if _gps_ok:
             try:
                 from services.eta_service import calculate_haversine
                 settings_gf = db.query(models.SystemSettings).first()
@@ -446,8 +454,17 @@ def end_trip(
 
     # Geofence jembatan timbang — lock jam pulang kalau driver ada di sana
     geo_locked = False
+    # Validasi bounding box GPS sebelum proses geofence
+    _LAT_MIN, _LAT_MAX = -12.0,  7.0
+    _LON_MIN, _LON_MAX =  94.0, 142.0
+    _gps_valid = (
+        data.gps_lat != 0.0 and data.gps_lon != 0.0 and
+        _LAT_MIN <= data.gps_lat <= _LAT_MAX and
+        _LON_MIN <= data.gps_lon <= _LON_MAX
+    )
+
     settings_db = db.query(models.SystemSettings).first()
-    if (data.gps_lat != 0.0 and data.gps_lon != 0.0
+    if (_gps_valid
             and settings_db
             and settings_db.jembatan_timbang_lat
             and settings_db.jembatan_timbang_lon):

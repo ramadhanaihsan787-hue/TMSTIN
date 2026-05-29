@@ -27,7 +27,9 @@ def submit_epod_with_ai(db: Session, line_id: int, qty_delivered: float, qty_ret
         return {"status": "error", "msg": "Delivery Order tidak ditemukan pada rute ini"}
 
     # 🌟 IMPLEMENTASI STATE MACHINE VALIDATOR
-    target_status = models.DOStatus.delivered_success if qty_return == 0 else models.DOStatus.delivered_partial
+    # Driver submit foto → status intermediate "menunggu review admin POD"
+    # Admin POD yang akan approve (→ delivered_success/partial) atau reject
+    target_status = models.DOStatus.delivered_pod_uploaded
     
     allowed_next_states = ALLOWED_POD_TRANSITIONS.get(order.status, [])
     if target_status not in allowed_next_states:

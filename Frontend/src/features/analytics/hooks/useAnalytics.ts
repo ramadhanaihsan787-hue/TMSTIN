@@ -67,7 +67,17 @@ export const useAnalytics = () => {
                 otifRate:         fmt(s?.success_rate_percent),
                 avgLoadingTime:   `${(s?.total_weight_kg ?? 0).toFixed(1)} KG`,
             });
-            setFleetData(data.utilization?.data);
+            // Robust fleet data mapping: handle nested .data atau flat response
+            const utilRaw = data.utilization;
+            const utilData = utilRaw?.data ?? utilRaw;   // kadang backend return flat
+            setFleetData(utilData ? {
+                totalTrucks:    utilData.totalTrucks   ?? utilData.total_trucks   ?? 0,
+                activeTrucks:   utilData.activeTrucks  ?? utilData.active_trucks  ?? 0,
+                utilizationRate: utilData.utilizationRate
+                    ?? (utilData.utilization_rate != null
+                        ? `${utilData.utilization_rate}%`
+                        : '0%'),
+            } : undefined);
             setVolumeData(data.volume?.data || []);
             setMaxVolume(data.volume?.max || 1);
             setDriverData(data.drivers?.data || []);
