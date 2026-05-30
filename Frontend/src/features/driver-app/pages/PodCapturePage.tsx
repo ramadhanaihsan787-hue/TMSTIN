@@ -1,13 +1,14 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom'; // 🌟 FIX CTO: Tambah useParams buat ambil stopId
+import { useNavigate } from 'react-router-dom';
 import SignatureCanvas from 'react-signature-canvas';
 import { toast } from 'sonner'; // 🌟 FIX CTO: Tambah notifikasi
 import Header from '../../../shared/components/Header';
-import { driverappService } from '../services/driverappService'; // 🌟 FIX CTO: Import API Engine lu
+import { driverappService } from '../services/driverappService';
+import { useDriverStore } from '../../../store/useDriverStore';
 
 const DriverPodCapture: React.FC = () => {
     const navigate = useNavigate();
-    const { stopId } = useParams<{ stopId: string }>(); // Ambil ID stop dari URL
+    const { activeStop, fetchMyRoute, tripData } = useDriverStore();
     const sigCanvas = useRef<SignatureCanvas>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -35,15 +36,10 @@ const DriverPodCapture: React.FC = () => {
         return () => observer.disconnect();
     }, []);
 
-    const mockSkus = [
-        { sku: "SGF-CK-001", name: "Karkas Ayam Broiler 1.0 - 1.2kg" },
-        { sku: "SGF-CK-002", name: "Boneless Dada Ayam (BLD)" },
-        { sku: "SGF-CK-003", name: "Boneless Paha Ayam (BLP)" },
-        { sku: "SGF-CK-004", name: "Sayap Ayam (Wings)" },
-        { sku: "SGF-CK-005", name: "Ati Ampela Ayam (Pack)" },
-        { sku: "SGF-CK-006", name: "Ayam Utuh Segar" },
-        { sku: "SGF-CK-007", name: "Paha Bawah (Drumstick)" }
-    ];
+    // Gunakan produk yang dikirim ke toko ini dari activeStop
+    // Format: [{nama_barang: "SGF BSL U 01 / 2.0KG TC", qty: "20.0 KG"}, ...]
+    const stopItems: Array<{nama_barang: string; qty: string}> = activeStop?.items || [];
+
 
     // =========================================================
     // 🌟 EXIF STRIPPER & COMPRESSOR
@@ -87,7 +83,12 @@ const DriverPodCapture: React.FC = () => {
     // 🌟 CONNECT BUTTON KE BACKEND API
     // =========================================================
     const handleSubmitPOD = async () => {
-        const currentStopId = stopId || 'dummy-stop-id'; // Fallback buat testing
+        const currentStopId = activeStop?.id;
+        if (!currentStopId) {
+            toast.error('Stop tidak ditemukan. Kembali ke halaman rute.');
+            navigate('/driver/routes');
+            return;
+        }
         
         if (!capturedImage) {
             toast.error("Foto Surat Jalan wajib diisi!");
@@ -99,14 +100,23 @@ const DriverPodCapture: React.FC = () => {
             const formData = new FormData();
             
             // 1. Convert Base64 Foto ke File/Blob
-            const photoBlob = await (await fetch(capturedImage)).blob();
-            formData.append('photo', photoBlob, 'pod_photo.jpg');
+            const rawBlob   = await (await fetch(capturedImage)).blob();
+            const photoBlob = new Blob([await rawBlob.arrayBuffer()], { type: "image/jpeg" });
+            formData.append('file', photoBlob, 'pod_photo.jpg');  // backend expects 'file' not 'photo'
 
-            // 2. Convert Base64 TTD ke File/Blob
+            // 2. Convert Base64 TTD ke File/Blob (getTrimmedCanvas optional — fallback ke toDataURL)
             if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                const sigDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
-                const sigBlob = await (await fetch(sigDataUrl)).blob();
-                formData.append('signature', sigBlob, 'signature.png');
+                try {
+                    const canvas = sigCanvas.current.getTrimmedCanvas?.()
+                        ?? sigCanvas.current.getCanvas?.();
+                    if (canvas) {
+                        const sigDataUrl = canvas.toDataURL('image/png');
+                        const sigBlob = await (await fetch(sigDataUrl)).blob();
+                        formData.append('signature', sigBlob, 'signature.png');
+                    }
+                } catch {
+                    // getTrimmedCanvas tidak tersedia — skip signature, lanjut submit
+                }
             }
 
             // 3. Masukin data retur kalau ada
@@ -117,8 +127,20 @@ const DriverPodCapture: React.FC = () => {
             // 4. TEMBAK BACKEND!
             await driverappService.submitEpod(currentStopId, formData);
 
-            toast.success("Bukti pengiriman berhasil diunggah!");
-            navigate('/driver/summary'); // Baru pindah halaman setelah sukses!
+            toast.success("✅ Bukti pengiriman berhasil diunggah!");
+
+            // Refresh data rute dari backend
+            await fetchMyRoute();
+
+            // Kalau semua stop selesai → summary, kalau belum → kembali ke daftar rute
+            const freshData = await driverappService.getMyRoute();
+            const allDone = freshData.total_stops > 0
+                && freshData.completed_stops >= freshData.total_stops;
+            if (allDone) {
+                navigate('/driver/summary');
+            } else {
+                navigate('/driver/routes');
+            }
         } catch (error) {
             console.error("Gagal submit POD:", error);
             toast.error("Gagal mengirim bukti. Coba lagi.");
@@ -190,21 +212,21 @@ const DriverPodCapture: React.FC = () => {
                                                         placeholder="Cari SKU atau Produk..."
                                                         className="w-full h-12 bg-white dark:bg-[#1A1A1A] border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 dark:text-white"
                                                     />
-                                                    {activeDropdownIndex === index && item.skuProduct && (
+                                                    {activeDropdownIndex === index && (
                                                         <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-[#2c2e33] rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 max-h-40 overflow-y-auto">
-                                                            {mockSkus.filter(s => s.sku.toLowerCase().includes(item.skuProduct.toLowerCase()) || s.name.toLowerCase().includes(item.skuProduct.toLowerCase())).map(s => (
+                                                            {stopItems.filter(s => !item.skuProduct || (s.nama_barang || '').toLowerCase().includes(item.skuProduct.toLowerCase())).map(s => (
                                                                 <div
-                                                                    key={s.sku}
+                                                                    key={s.nama_barang}
                                                                     onMouseDown={() => {
                                                                         const newItems = [...returnItems];
-                                                                        newItems[index].skuProduct = `${s.sku} - ${s.name}`;
+                                                                        newItems[index].skuProduct = s.nama_barang;
                                                                         setReturnItems(newItems);
                                                                         setActiveDropdownIndex(null);
                                                                     }}
                                                                     className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer border-b border-slate-50 dark:border-white/5 last:border-0"
                                                                 >
-                                                                    <p className="text-xs font-bold text-slate-900 dark:text-white">{s.sku}</p>
-                                                                    <p className="text-[10px] text-slate-400 font-medium">{s.name}</p>
+                                                                    <p className="text-xs font-bold text-slate-900 dark:text-white">{s.nama_barang}</p>
+                                                                    <p className="text-[10px] text-slate-400 font-medium">{s.qty}</p>
                                                                 </div>
                                                             ))}
                                                         </div>

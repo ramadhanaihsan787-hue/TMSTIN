@@ -640,7 +640,7 @@ export default function History() {
                                         <div 
                                             className="absolute inset-0 bg-cover bg-center opacity-90 transition-transform duration-200" 
                                             style={{ 
-                                                backgroundImage: `url('${selectedRecord.photo_url || defaultPhoto}')`, 
+                                                backgroundImage: `url('${selectedRecord.photo_url ? (selectedRecord.photo_url.startsWith('http') ? selectedRecord.photo_url : (import.meta.env.VITE_API_URL || 'http://localhost:8000') + selectedRecord.photo_url) : defaultPhoto}')`, 
                                                 transform: `scale(${zoom}) rotate(${rotation}deg)` 
                                             }}
                                         ></div>

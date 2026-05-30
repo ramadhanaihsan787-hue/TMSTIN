@@ -9,12 +9,16 @@ logger = logging.getLogger(__name__)
 # 🌟 FIX CTO: STATE MACHINE (Kamus Transisi Status yang Sah)
 # Format: { Status_Saat_Ini : [Daftar_Status_Tujuan_Yang_Diizinkan] }
 ALLOWED_POD_TRANSITIONS = {
+    # Step 1: driver kirim foto → masuk antrean review admin POD
     models.DOStatus.do_assigned_to_route: [
+        models.DOStatus.delivered_pod_uploaded,
+    ],
+    # Step 2: admin POD review → final verdict
+    models.DOStatus.delivered_pod_uploaded: [
         models.DOStatus.delivered_success,
         models.DOStatus.delivered_partial,
-        models.DOStatus.failed
+        models.DOStatus.failed,
     ],
-    # Kalau butuh transisi lain, tambahin di sini
 }
 
 def submit_epod_with_ai(db: Session, line_id: int, qty_delivered: float, qty_return: float, reason: str, photo_url: str):

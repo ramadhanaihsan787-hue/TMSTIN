@@ -120,6 +120,11 @@ const DriverTripSummary: React.FC = () => {
         } finally {
             localStorage.removeItem('driver_start_km');
             endTrip();
+            // Hapus semua flag trip (truck-specific dan generik)
+            Object.keys(localStorage)
+                .filter(k => k.startsWith('driver_trip_started_') || k === 'driver_trip_started')
+                .forEach(k => localStorage.removeItem(k));
+            localStorage.removeItem('driver_start_km');
             navigate('/driver');
             setIsEnding(false);
         }

@@ -154,24 +154,39 @@ def get_my_route(
         db.commit()
 
     today = date.today()
+
+    # Cari sebagai DRIVER dulu, fallback sebagai HELPER
+    # Helper di truk yang sama tetap bisa lihat rute via helper_id
     plan = db.query(models.TMSRoutePlan).filter(
         models.TMSRoutePlan.driver_id == driver.driver_id,
         models.TMSRoutePlan.planning_date == today
     ).first()
 
+    _is_helper_role = False
+    if not plan:
+        plan = db.query(models.TMSRoutePlan).filter(
+            models.TMSRoutePlan.helper_id == driver.driver_id,
+            models.TMSRoutePlan.planning_date == today
+        ).first()
+        if plan:
+            _is_helper_role = True
+            logger.info(f"👥 {driver.name} login sebagai Helper di rute {plan.route_id}")
+
     if not plan:
         return {
-            "truck_id": "-",
-            "driver_name": driver.name,
-            "total_stops": 0,
+            "truck_id":       "-",
+            "driver_name":    driver.name,
+            "role":           "helper" if _is_helper_role else "driver",
+            "total_stops":    0,
             "completed_stops": 0,
             "total_distance": 0,
-            "stops": []
+            "stops":          []
         }
 
     stops_data = []
-    completed_count = 0
-    
+    completed_count  = 0
+    first_active_set = False
+
     lines = db.query(models.TMSRouteLine).filter(
         models.TMSRouteLine.route_id == plan.route_id
     ).order_by(models.TMSRouteLine.sequence).all()
@@ -182,12 +197,14 @@ def get_my_route(
         if order.status in [
             models.DOStatus.delivered_success,
             models.DOStatus.delivered_partial,
-            models.DOStatus.delivered_pod_uploaded,  # foto sudah dikirim, menunggu review
+            models.DOStatus.delivered_pod_uploaded,
+            models.DOStatus.failed,
         ]:
             status_fe = "completed"
             completed_count += 1
-        elif order.status == models.DOStatus.do_assigned_to_route:
-            status_fe = "active" if line.sequence == 1 else "pending"
+        elif not first_active_set:
+            status_fe = "active"   # stop pertama yang belum selesai = active
+            first_active_set = True
 
         # 🌟 FIX CTO: Clean & Strict Relationship Mapping (Hapus fallback lakban 'hasattr'!)
         # Kita percaya 100% pada struktur SQLAlchemy kita
@@ -248,7 +265,8 @@ def update_stop_status(
 # ==========================================
 # 3. SUBMIT E-POD (SECURE UPLOAD + VALIDATION + WATERMARK + AI ANOMALY REJECTION)
 # ==========================================
-ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"]
+ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/octet-stream"]
+ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp"]
 MAX_FILE_SIZE_MB = 5
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -265,8 +283,10 @@ async def submit_epod(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    # Validasi MIME type — terima octet-stream karena beberapa browser
+    # kirim blob tanpa proper Content-Type dari canvas/data URL
     if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Format file ditolak! Hanya boleh upload gambar (JPG, PNG, WEBP).")
+        raise HTTPException(status_code=400, detail=f"Format file ditolak! Terima: JPG/PNG/WEBP. Diterima: {file.content_type}")
 
     file_content = await file.read() 
     if len(file_content) > MAX_FILE_SIZE_BYTES:
@@ -300,9 +320,9 @@ async def submit_epod(
             if return_reason in ["Barang Rusak", "Packaging Bocor", "Kadaluarsa"]:
                 qty_damaged = return_qty
 
-        file_ext = file.filename.split(".")[-1].lower()
-        if file_ext not in ["jpg", "jpeg", "png", "webp"]:
-             raise HTTPException(status_code=400, detail="Ekstensi file mencurigakan!")
+        file_ext = file.filename.split(".")[-1].lower() if file.filename else "jpg"
+        if file_ext not in ALLOWED_EXTENSIONS:
+            file_ext = "jpg"  # fallback kalau nama file tidak ada ekstensi valid
 
         # --- PROSES WATERMARK & SAVE FILE ---
         timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

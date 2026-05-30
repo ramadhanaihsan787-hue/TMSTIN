@@ -3,6 +3,11 @@ import { api } from '../../../shared/services/apiClient';
 // ==========================================
 // INTERFACES (Tipe Data)
 // ==========================================
+export interface StopItem {
+    nama_barang: string;
+    qty: string;
+}
+
 export interface RouteStop {
     id: string | number;
     sequence: number;
@@ -13,6 +18,7 @@ export interface RouteStop {
     weight_realisasi?: number;
     weight_routing?: number;
     has_realisasi?: boolean;
+    items?: StopItem[];
     status: 'pending' | 'active' | 'completed' | 'failed';
     latitude?: number;
     longitude?: number;

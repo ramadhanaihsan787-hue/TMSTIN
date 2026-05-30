@@ -14,6 +14,14 @@ def parse_dates(start_str: str, end_str: str):
         s_date = e_date - timedelta(days=30)
         return s_date, e_date
 
+def _ew(order) -> float:
+    """Effective weight: realisasi gudang jika ada, fallback ke routing qty."""
+    if order is None: return 0.0
+    if order.weight_realisasi and float(order.weight_realisasi) > 0:
+        return float(order.weight_realisasi)
+    return float(order.weight_total or 0.0)
+
+
 def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, settings):
     start_date, end_date = parse_dates(start_date_str, end_date_str)
 

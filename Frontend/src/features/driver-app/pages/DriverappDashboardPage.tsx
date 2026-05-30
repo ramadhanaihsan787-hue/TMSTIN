@@ -1,5 +1,5 @@
 // driverappdashboardpage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../../shared/components/Header';
 import { useDriverappFlow } from '../hooks/useDriverappFlow';
@@ -13,6 +13,19 @@ const DriverDashboard: React.FC = () => {
     // 🌟 NYEDOT DATA DARI BACKEND
     const { startRoute, isLoading, tripData } = useDriverappFlow();
     
+    // Auto-redirect ke routes kalau trip sudah dimulai sebelumnya
+    // Key localStorage include truck_id agar tiap truk punya state sendiri
+    // Mencegah driver truk lain kena redirect karena flag dari driver sebelumnya
+    const tripKey = `driver_trip_started_${tripData?.truck_id || 'none'}`;
+
+    useEffect(() => {
+        if (!tripData?.truck_id) return;  // tunggu truck_id terload dulu
+        const tripStarted = localStorage.getItem(tripKey);
+        if (tripStarted === 'true' && tripData && (tripData.stops?.length || 0) > 0) {
+            navigate('/driver/routes');
+        }
+    }, [tripData, navigate, tripKey]);
+
     // Hitung progress beneran
     const totalStops = tripData?.total_stops || 0;
     const completedCount = tripData?.completed_stops || 0;
@@ -112,6 +125,7 @@ const DriverDashboard: React.FC = () => {
                         onClick={async () => {
                             if (!startKm) { toast.error('Isi odometer awal dahulu!'); return; }
                             localStorage.setItem('driver_start_km', startKm);
+            localStorage.setItem(tripKey, 'true');  // flag truck-specific: jangan tanya odometer lagi
                             if (tripData?.route_id) {
                                 try {
                                     await driverappService.startTrip(tripData.route_id, Number(startKm));

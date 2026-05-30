@@ -451,8 +451,10 @@ async def parse_bop_excel(
             continue
             
         try:
-            no_int = int(str(no_val).strip())
-        except ValueError:
+            # Excel sering simpan angka sebagai float (1.0, 2.0)
+            # Pakai float() dulu baru int() agar "1.0" → 1 tidak error
+            no_int = int(float(str(no_val).strip()))
+        except (ValueError, TypeError):
             continue
 
         plate = str(g('plate') or "").strip().upper()

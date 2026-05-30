@@ -1,122 +1,129 @@
-import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../../../shared/components/Header';
+import { useDriverStore } from '../../../store/useDriverStore';
+import { driverappService } from '../services/driverappService';
+import { toast } from 'sonner';
 import Map, { Marker } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import Header from '../../../shared/components/Header';
 
-const DriverDeliveryDetail: React.FC = () => {
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
+export default function DeliveryDetailPage() {
+    const navigate  = useNavigate();
+    const { activeStop, fetchMyRoute } = useDriverStore();
 
-    const isLast = searchParams.get('isLast') === 'true';
+    // Fallback kalau akses langsung tanpa activeStop
+    if (!activeStop) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-[#1a1c1e] flex flex-col">
+                <Header title="Stop Detail" />
+                <div className="flex-1 flex items-center justify-center text-slate-400">
+                    <div className="text-center">
+                        <span className="material-symbols-outlined text-5xl">route</span>
+                        <p className="mt-2 font-bold">Tidak ada stop aktif</p>
+                        <button onClick={() => navigate('/driver/routes')}
+                            className="mt-4 px-6 py-2 bg-primary text-white rounded-xl font-bold">
+                            Kembali ke Rute
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-    const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+    const lat = activeStop.latitude  || (activeStop as any).lat || 0;
+    const lon = activeStop.longitude || (activeStop as any).lon || (activeStop as any).lng || 0;
+    const hasCoords = lat !== 0 && lon !== 0;
 
-    React.useEffect(() => {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.attributeName === 'class') {
-                    setIsDark(document.documentElement.classList.contains('dark'));
-                }
-            });
-        });
-
-        observer.observe(document.documentElement, { attributes: true });
-
-        return () => observer.disconnect();
-    }, []);
-
-    // Destination: RS Mitra Keluarga Cikarang
-    const destination = {
-        longitude: 107.144415,
-        latitude: -6.326354,
-        name: "RS Mitra Keluarga Cikarang"
+    const handleArrived = async () => {
+        try {
+            await driverappService.updateStopStatus(activeStop.id, 'arrived');
+            await fetchMyRoute();
+            navigate('/driver/pod');
+        } catch {
+            toast.error('Gagal update status. Coba lagi.');
+        }
     };
 
-    const [viewState, setViewState] = useState({
-        longitude: destination.longitude,
-        latitude: destination.latitude,
-        zoom: 14
-    });
-
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-[#1a1c1e] font-sans transition-colors duration-300 text-slate-900 dark:text-white">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#1a1c1e] font-sans">
             <Header title="Stop Detail" />
 
-            <main className="max-w-md mx-auto px-4 py-6 flex flex-col min-h-[calc(100vh-80px)]">
-                <div className="bg-white dark:bg-[#2c2e33] rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Customer Name</p>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">{destination.name}</h3>
-                    </div>
+            <main className="max-w-md mx-auto px-4 py-6 space-y-4 pb-32">
 
+                {/* Info Toko */}
+                <div className="bg-white dark:bg-[#2c2e33] rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
                     <div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Address</p>
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
-                            Jl. Raya Industri No. 100, <br />
-                            Cikarang Selatan, Bekasi, <br />
-                            Jawa Barat 17530
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Customer Name</p>
+                        <p className="text-lg font-bold dark:text-white">
+                            {(activeStop as any).customerName || (activeStop as any).nama_toko || 'Toko'}
                         </p>
                     </div>
 
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">PIC Name</p>
-                        <p className="text-base font-bold text-slate-900 dark:text-white">Bapak Budi Santoso</p>
-                    </div>
+                    {(activeStop as any).address && (
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Address</p>
+                            <p className="text-sm dark:text-slate-300 leading-relaxed">
+                                {(activeStop as any).address}
+                            </p>
+                        </div>
+                    )}
 
-                    <button className="w-full h-12 bg-primary/20 text-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/30 transition-all active:scale-[0.98]">
-                        <span className="material-symbols-outlined text-lg">call</span>
-                        Call PIC
-                    </button>
-
-                    <div className="aspect-video rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner relative">
-                        <Map
-                            {...viewState}
-                            onMove={evt => setViewState(evt.viewState)}
-                            style={{ width: '100%', height: '100%' }}
-                            mapStyle={isDark ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11"}
-                            mapboxAccessToken={mapboxToken}
-                        >
-                            <Marker longitude={destination.longitude} latitude={destination.latitude}>
-                                <span className="material-symbols-outlined text-primary bg-white rounded-full p-1 text-sm shadow-md">location_on</span>
-                            </Marker>
-                        </Map>
-                        <div className="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-none">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-white bg-black/50 px-2 py-1 rounded shadow-sm">Destinasi</span>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Muatan</p>
+                            <p className={`text-base font-bold ${(activeStop as any).has_realisasi ? 'text-teal-400' : 'dark:text-white'}`}>
+                                {activeStop.weight}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Jam Tiba</p>
+                            <p className="text-base font-bold dark:text-white">{activeStop.timeWindow || '—'}</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="mt-auto pt-8 space-y-4 pb-8">
-                    {isLast && (
-                        <button
-                            onClick={() => navigate('/driver/summary')}
-                            className="w-full h-14 bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-orange-200 dark:hover:bg-orange-900/30 transition-all active:scale-[0.98]"
-                        >
-                            <span className="material-symbols-outlined text-xl">replay</span>
-                            KIRIM ULANG
-                        </button>
-                    )}
-
-                    <button
-                        onClick={() => navigate('/driver/navigation')}
-                        className="w-full h-14 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-[0.98]"
-                    >
-                        <span className="material-symbols-outlined text-xl">navigation</span>
-                        MULAI NAVIGASI
-                    </button>
-
-                    <button
-                        onClick={() => navigate('/driver/pod')}
-                        className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 transition-all active:scale-95 uppercase tracking-wide"
-                    >
-                        SAYA SUDAH TIBA
-                    </button>
-                </div>
+                {/* Peta */}
+                {hasCoords && (
+                    <div className="bg-white dark:bg-[#2c2e33] rounded-3xl overflow-hidden border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <div className="h-48">
+                            <Map
+                                initialViewState={{ longitude: lon, latitude: lat, zoom: 15 }}
+                                style={{ width: '100%', height: '100%' }}
+                                mapStyle="mapbox://styles/mapbox/navigation-night-v1"
+                                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                                interactive={false}
+                            >
+                                <Marker longitude={lon} latitude={lat} anchor="bottom">
+                                    <span className="material-symbols-outlined text-primary text-3xl drop-shadow-lg">
+                                        location_on
+                                    </span>
+                                </Marker>
+                            </Map>
+                        </div>
+                        <div className="px-4 py-2 text-xs text-slate-400 font-mono">
+                            📍 {lat.toFixed(6)}, {lon.toFixed(6)}
+                        </div>
+                    </div>
+                )}
             </main>
+
+            {/* Tombol aksi fixed di bawah */}
+            <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-4 pb-6 pt-3 bg-slate-50/95 dark:bg-[#1a1c1e]/95 backdrop-blur space-y-3">
+                <button
+                    onClick={() => navigate('/driver/navigation')}
+                    className="w-full h-14 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+                >
+                    <span className="material-symbols-outlined">navigation</span>
+                    MULAI NAVIGASI
+                </button>
+                <button
+                    onClick={handleArrived}
+                    className="w-full h-14 bg-primary hover:bg-primary/90 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 shadow-xl shadow-primary/20"
+                >
+                    <span className="material-symbols-outlined">where_to_vote</span>
+                    SAYA SUDAH TIBA
+                </button>
+            </div>
         </div>
     );
-};
-
-export default DriverDeliveryDetail;
+}

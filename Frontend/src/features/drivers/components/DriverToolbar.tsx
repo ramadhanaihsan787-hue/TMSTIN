@@ -7,7 +7,7 @@ export default function DriverToolbar({ searchQuery, onSearchChange }: DriverToo
     return (
         <div className="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
             <div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Driver Performance Directoryyyy</h2>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Driver Performance Directory</h2>
                 <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm font-medium">Monitor driver performance and real-time shift progress.</p>
             </div>
 

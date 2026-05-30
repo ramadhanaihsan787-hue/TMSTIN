@@ -36,6 +36,7 @@
     "react-map-gl": "^8.1.1",
     "react-router-dom": "^7.13.1",
     "react-signature-canvas": "^1.1.0-alpha.2",
+    "trim-canvas": "^0.1.2",
     "sonner": "^2.0.7",
     "three": "^0.183.2",
     "three-mesh-bvh": "^0.9.9",

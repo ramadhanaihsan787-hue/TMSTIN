@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Header from "../../../shared/components/Header";
-import { usePod } from '../hooks/usePod';
+// usePod diganti fetch langsung ke /api/pod/verifications untuk data lengkap
 import { api } from '../../../shared/services/apiClient';
 
 interface PodStats {
@@ -12,7 +12,23 @@ interface PodStats {
 }
 
 export default function PodDashboardPage() {
-    const { orders, isLoading, error } = usePod();
+    const [orders, setOrders]   = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError]     = useState<string | null>(null);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const res = await api.get('/api/pod/verifications');
+                setOrders(res.data?.data || []);
+            } catch (e: any) {
+                setError('Gagal memuat data verifikasi');
+            } finally { setIsLoading(false); }
+        };
+        load();
+        const interval = setInterval(load, 30_000);
+        return () => clearInterval(interval);
+    }, []);
     const [stats, setStats]     = useState<PodStats | null>(null);
     const [statsLoading, setStatsLoading] = useState(true);
 
@@ -155,7 +171,7 @@ export default function PodDashboardPage() {
                                         <tr><td colSpan={7} className="py-8 text-center text-red-500 font-bold">🚨 {error}</td></tr>
                                     )}
                                     {!isLoading && !error && orders.length === 0 && (
-                                        <tr><td colSpan={7} className="py-8 text-center text-slate-500 font-bold">Antrean kosong!</td></tr>
+                                        <tr><td colSpan={7} className="py-8 text-center text-slate-500 font-bold">🎉 Hore! Antrean kosong, gaada kerjaan!</td></tr>
                                     )}
                                     {!isLoading && !error && orders.map((order) => (
                                         <tr key={order.order_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -163,11 +179,11 @@ export default function PodDashboardPage() {
                                             <td className="py-4 min-w-[200px] font-medium">{order.customer_name}</td>
                                             <td className="py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">{order.weight_total} KG</td>
                                             <td className="py-4 text-slate-500 italic whitespace-nowrap">
-                                                {(order as any).driver_name || 'Menunggu Supir…'}
+                                                {order.driver_name && order.driver_name !== 'Unknown Driver' ? order.driver_name : '—'}
                                             </td>
                                             <td className="py-4 text-slate-500 whitespace-nowrap">
-                                                {(order as any).epod_timestamp
-                                                    ? new Date((order as any).epod_timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                                                {order.timestamp
+                                                    ? order.timestamp.split(' ')[1] || order.timestamp
                                                     : '—'
                                                 }
                                             </td>
@@ -181,7 +197,7 @@ export default function PodDashboardPage() {
                                                 }`}>
                                                     {order.status === 'delivered_pod_uploaded'
                                                         ? '📷 FOTO DIKIRIM'
-                                                        : order.status.replace(/_/g, ' ').toUpperCase()
+                                                        : (order.status || '').replace(/_/g, ' ').toUpperCase()
                                                     }
                                                 </span>
                                             </td>
