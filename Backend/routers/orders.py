@@ -397,6 +397,91 @@ def get_pending_orders(status: Optional[str] = None, db: Session = Depends(get_d
         } for o in orders]
     }
 
+@router.get("/pod/stats")
+def get_pod_stats(db: Session = Depends(get_db),
+                  current_user: models.User = Depends(require_role("admin_pod", "manager_logistik"))):
+    """
+    KPI stats untuk POD dashboard:
+    - pending: DO masih menunggu review admin POD
+    - auto_verified_pct: % DO yang langsung success tanpa rejection
+    - rejected_today: DO yang failed/rejected hari ini
+    - avg_processing_mins: rata-rata waktu antrean (menit sejak pod_uploaded)
+    """
+    import datetime as _dt
+    today = _dt.date.today()
+
+    # Pending — menunggu verifikasi admin POD
+    pending = db.query(models.DeliveryOrder).filter(
+        models.DeliveryOrder.status == models.DOStatus.delivered_pod_uploaded
+    ).count()
+
+    # Total selesai hari ini (success + partial + failed)
+    total_completed = db.query(models.DeliveryOrder).join(
+        models.TMSRouteLine, models.TMSRouteLine.order_id == models.DeliveryOrder.order_id
+    ).join(
+        models.TMSRoutePlan, models.TMSRoutePlan.route_id == models.TMSRouteLine.route_id
+    ).filter(
+        models.TMSRoutePlan.planning_date == today,
+        models.DeliveryOrder.status.in_([
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial,
+            models.DOStatus.failed,
+        ])
+    ).count()
+
+    # Success (auto-verified = tidak perlu manual rejection)
+    total_success = db.query(models.DeliveryOrder).join(
+        models.TMSRouteLine, models.TMSRouteLine.order_id == models.DeliveryOrder.order_id
+    ).join(
+        models.TMSRoutePlan, models.TMSRoutePlan.route_id == models.TMSRouteLine.route_id
+    ).filter(
+        models.TMSRoutePlan.planning_date == today,
+        models.DeliveryOrder.status.in_([
+            models.DOStatus.delivered_success,
+            models.DOStatus.delivered_partial,
+        ])
+    ).count()
+
+    # Rejected hari ini
+    rejected_today = db.query(models.DeliveryOrder).join(
+        models.TMSRouteLine, models.TMSRouteLine.order_id == models.DeliveryOrder.order_id
+    ).join(
+        models.TMSRoutePlan, models.TMSRoutePlan.route_id == models.TMSRouteLine.route_id
+    ).filter(
+        models.TMSRoutePlan.planning_date == today,
+        models.DeliveryOrder.status == models.DOStatus.failed
+    ).count()
+
+    # Auto-verified %
+    auto_verified_pct = round((total_success / total_completed * 100), 1) if total_completed > 0 else 0.0
+
+    # Avg processing: rata-rata usia antrean yang pending (menit sejak created_at sebagai proxy)
+    pending_orders = db.query(models.DeliveryOrder).filter(
+        models.DeliveryOrder.status == models.DOStatus.delivered_pod_uploaded
+    ).all()
+    if pending_orders:
+        now = _dt.datetime.now()
+        ages = []
+        for o in pending_orders:
+            if o.created_at:
+                age_min = (now - o.created_at).total_seconds() / 60
+                ages.append(age_min)
+        avg_processing = round(sum(ages) / len(ages), 1) if ages else 0.0
+    else:
+        avg_processing = 0.0
+
+    return {
+        "status": "success",
+        "data": {
+            "pending":            pending,
+            "auto_verified_pct":  auto_verified_pct,
+            "rejected_today":     rejected_today,
+            "total_completed":    total_completed,
+            "avg_queue_mins":     avg_processing,  # menit rata-rata dalam antrean
+        }
+    }
+
+
 @router.get("/pod/verifications")
 def get_pod_verifications(db: Session = Depends(get_db), current_user: models.User = Depends(require_role("admin_pod"))):
     orders = db.query(models.DeliveryOrder).options(

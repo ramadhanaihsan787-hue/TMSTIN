@@ -1,7 +1,17 @@
+import React, { useEffect, useState } from 'react';
 import PodSidebar from "../../../shared/components/Sidebar";
 import Header from '../../../shared/components/Header';
 
 export default function Dashboard() {
+    const [podStats, setPodStats] = useState<any>(null);
+    useEffect(() => {
+        import('../../../shared/services/apiClient').then(({ api }) => {
+            api.get('/api/pod/stats')
+               .then(r => setPodStats(r.data?.data || r.data))
+               .catch(() => {});
+        });
+    }, []);
+
     return (
         <div className="flex h-screen overflow-hidden relative bg-main-bg dark:bg-[#0a0a0a] text-slate-900 dark:text-slate-100 antialiased font-display transition-colors">
             <PodSidebar />
@@ -36,7 +46,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
                             <div className="flex items-baseline gap-2">
-                                <h3 className="text-3xl font-bold text-slate-900 dark:text-white">85.4%</h3>
+                                <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{podStats?.auto_verified_pct != null ? `${podStats.auto_verified_pct}%` : "—"}</h3>
                                 <span className="text-green-500 dark:text-green-400 text-sm font-bold flex items-center">
                                     <span className="material-symbols-outlined text-xs">arrow_upward</span> 2.1%
                                 </span>

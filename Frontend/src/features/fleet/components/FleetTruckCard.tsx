@@ -17,7 +17,7 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
         totalStopsToday,     // jumlah stop hari ini
         speedKmH = 0,
         batteryPct = 0,
-        currentTemp = -18.0,
+        currentTemp = null,     // null = belum ada data GPS/suhu
         setPointTemp = -18,
         tempStatus = "Healthy",
         sparklineData = [15, 15, 15, 15, 15, 15],
@@ -41,6 +41,8 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
     let progressWidth = "70%";
     let batteryOverlayBg = "bg-app-green/20 border-app-green/50";
     let sparklineStroke = "#10b981";
+    // Tampil "N/A" kalau belum ada data GPS — jangan tampil dummy -18.0
+    const hasTemp = currentTemp !== null && currentTemp !== undefined;
     let tempLabel = "SAFE FROZEN";
     let gradientFrom = "from-app-green/5";
 
@@ -101,7 +103,7 @@ export default function FleetTruckCard({ truck, isSelected, onSelect }: FleetTru
                         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path d="M12 3v18m0-18l-4 4m4-4l4 4M12 21l-4-4m4 4l4-4M3 12h18M3 12l4-4m-4 4l4 4m14-4l-4-4m4 4l-4 4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
                         </svg>
-                        <span className="text-3xl font-bold tracking-tight">{currentTemp.toFixed(1)}°C</span>
+                        <span className="text-3xl font-bold tracking-tight">{currentTemp != null ? `${currentTemp.toFixed(1)}°C` : "—"}</span>
                     </div>
                     
                     {/* Sparkline */}
