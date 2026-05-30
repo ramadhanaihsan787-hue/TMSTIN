@@ -6,5 +6,8 @@ export interface RouteStop {
     customerName: string;
     timeWindow: string;
     weight: string;
+    weight_realisasi?: number;
+    weight_routing?: number;
+    has_realisasi?: boolean;
     status: StopStatus;
 }

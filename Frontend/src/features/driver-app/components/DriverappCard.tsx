@@ -53,7 +53,13 @@ export default function DriverCard({ stop, onClick, onNavigate }: DriverCardProp
                                 </span>
                                 Active Route
                             </span>
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{stop.weight}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"
+    style={{ color: stop.has_realisasi ? '#14b8a6' : undefined }}>
+    {stop.weight}
+    {stop.has_realisasi && (
+        <span className="text-[8px] bg-teal-500/20 text-teal-400 px-1 rounded font-bold">✓</span>
+    )}
+</span>
                         </div>
 
                         <div className="flex gap-3">
@@ -92,7 +98,13 @@ export default function DriverCard({ stop, onClick, onNavigate }: DriverCardProp
                             <span className="material-symbols-outlined text-xs">pending</span> Pending
                         </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                            <span className="material-symbols-outlined text-xs">scale</span> {stop.weight}
+                            <span className="material-symbols-outlined text-xs">scale</span>
+    {stop.weight}
+    {stop.has_realisasi && (
+        <span className="ml-1 text-[9px] bg-teal-500/20 text-teal-400 px-1.5 py-0.5 rounded font-bold">
+            FINAL
+        </span>
+    )}
                         </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-auto bg-slate-50 dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-800">
                             {stop.timeWindow}

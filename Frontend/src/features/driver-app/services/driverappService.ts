@@ -10,6 +10,9 @@ export interface RouteStop {
     address: string;
     timeWindow: string;
     weight: string;
+    weight_realisasi?: number;
+    weight_routing?: number;
+    has_realisasi?: boolean;
     status: 'pending' | 'active' | 'completed' | 'failed';
     latitude?: number;
     longitude?: number;

@@ -49,6 +49,8 @@ export default function RoutePlanningPage() {
     const [coordPopupPos,   setCoordPopupPos]      = useState<{x:number,y:number} | null>(null);
     const [isFleetPanelOpen, setIsFleetPanelOpen] = useState(true);
     const [savingCoord, setSavingCoord]            = useState(false);
+    const [uploadingRealisasi, setUploadingRealisasi] = useState(false);
+    const [realisasiReport, setRealisasiReport]       = useState<any>(null);
 
     const truckColors = [
         // Warna terang & vivid — kontras tinggi di basemap navigation-night
@@ -133,6 +135,35 @@ export default function RoutePlanningPage() {
             toast.error('Gagal menyimpan koordinat');
         } finally {
             setSavingCoord(false);
+        }
+    };
+
+    const handleUploadRealisasi = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        setUploadingRealisasi(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/api/orders/upload-realisasi', formData);
+            const data = res.data;
+            setRealisasiReport(data);
+            if (data.updated_count > 0) {
+                toast.success(
+                    `✅ ${data.updated_count} order diupdate! ` +
+                    `Selisih total: ${data.summary?.total_selisih_kg} KG`
+                );
+            } else {
+                toast.warning('Tidak ada order yang diupdate. Cek kolom REALISASI di Excel.');
+            }
+            if (data.not_found?.length > 0) {
+                toast.warning(`${data.not_found.length} kode customer tidak ditemukan di sistem.`);
+            }
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || 'Gagal upload realisasi');
+        } finally {
+            setUploadingRealisasi(false);
+            event.target.value = '';
         }
     };
 
@@ -278,6 +309,9 @@ export default function RoutePlanningPage() {
                     onDateChange={setSelectedDate}
                     isUploading={isUploading}
                     onFileUpload={handleFileUpload}
+                    onUploadRealisasi={handleUploadRealisasi}
+                    isUploadingRealisasi={uploadingRealisasi}
+                    hasRoutes={(safeRoutesData?.length || 0) > 0}
                 />
 
                 <RouteSummaryCards

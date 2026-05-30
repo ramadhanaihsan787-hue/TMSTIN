@@ -39,7 +39,7 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
         for line in rute.route_lines:
             if line.sequence > 0 and line.order:
                 total_do += 1
-                total_berat += float(line.order.weight_total) if line.order.weight_total else 0.0
+                total_berat += _ew(line.order)
 
     load_utilization = 0.0
     if total_capacity_available > 0:
@@ -98,7 +98,7 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
     today_target_kg, completed_qty_kg, completed_drops, in_transit_drops = 0.0, 0.0, 0, 0
 
     for line in today_orders:
-        weight = float(line.order.weight_total) if line.order and line.order.weight_total else 0.0
+        weight = _ew(line.order)
         today_target_kg += weight
         
         epod = db.query(models.TMSEpodHistory).filter(models.TMSEpodHistory.line_id == line.line_id).first()
@@ -123,7 +123,7 @@ def get_kpi_summary(db: Session, start_date_str: str, end_date_str: str, setting
         rutes_day = db.query(models.TMSRoutePlan).filter(models.TMSRoutePlan.planning_date == target_date).all()
         day_volume = 0.0
         for r in rutes_day:
-            day_volume += sum([float(line.order.weight_total) for line in r.route_lines if line.order and line.order.weight_total and line.sequence > 0])
+            day_volume += sum([_ew(line.order) for line in r.route_lines if line.order and line.sequence > 0])
         volume_trend.append(round(day_volume))
 
         # OTIF (Success Rate) that day
@@ -177,7 +177,7 @@ def get_efficiency_dashboard(db: Session, settings):
 
     for r in rutes:
         total_capacity += float(r.vehicle.capacity_kg) if r.vehicle and r.vehicle.capacity_kg else default_cap_eff
-        total_weight += sum([float(line.order.weight_total) for line in r.route_lines if line.order and line.order.weight_total and line.sequence > 0])
+        total_weight += sum([_ew(line.order) for line in r.route_lines if line.order and line.sequence > 0])
 
     lf_percent = round((total_weight / total_capacity) * 100, 1) if total_capacity > 0 else 0.0
     

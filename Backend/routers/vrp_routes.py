@@ -81,7 +81,12 @@ def get_routes(
             )
             nama_toko = order.customer.store_name if order.customer else "Toko"
 
-            berat = float(order.weight_total) if order.weight_total else 0.0
+            # Effective weight: realisasi gudang jika ada, fallback ke routing qty
+            berat = (float(order.weight_realisasi)
+                     if order.weight_realisasi and float(order.weight_realisasi) > 0
+                     else float(order.weight_total or 0.0))
+            berat_routing = float(order.weight_total or 0.0)
+            has_realisasi = bool(order.weight_realisasi and float(order.weight_realisasi) > 0)
             detail_rute.append({
                 "urutan": line.sequence,
                 "nama_toko": nama_toko,
@@ -89,8 +94,10 @@ def get_routes(
                 "longitude": float(order.longitude) if order.longitude else 0.0,
                 "lat": float(order.latitude) if order.latitude else 0.0,
                 "lon": float(order.longitude) if order.longitude else 0.0,
-                "berat_kg": berat,
-                "turun_barang_kg": berat,   # alias — dibutuhkan schema & frontend
+                "berat_kg":          berat,
+                "turun_barang_kg":   berat,           # alias — dibutuhkan schema & frontend
+                "berat_routing_kg":  berat_routing,   # qty yang dipakai saat routing
+                "has_realisasi":     has_realisasi,   # flag: apakah sudah ada realisasi
                 "jam_tiba": str(line.est_arrival),
                 "distance_from_prev_km": float(line.distance_from_prev_km or 0.0),
                 "items": items,

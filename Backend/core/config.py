@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     api_temp_sensor: Optional[str] = None
     sync_interval_sec: int = 60
 
+    # GPS Vendor Webhook Secret — WAJIB di-set di .env, jangan pakai default ini di production!
+    # Generate: python3 -c "import secrets; print(secrets.token_hex(32))"
+    GPS_WEBHOOK_SECRET: str = "JAPFA-GPS-SECRET-2026-GANTI-DI-PRODUCTION"
+
     # Alerts
     alert_max_temp_celsius: float = 4.0
     alert_delay_mins: int = 30

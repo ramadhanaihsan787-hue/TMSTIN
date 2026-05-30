@@ -44,18 +44,16 @@ def get_manager_overview(db: Session):
                 delayed_trucks += 1
 
     # ── Total berat hari ini ──────────────────────────────────────────────
+    # Pakai effective_weight: realisasi gudang jika ada, fallback ke routing qty
     total_weight_today = sum(
-        float(l.order.weight_total)
-        for l in lines_today
-        if l.order and l.order.weight_total
+        _ew(l.order) for l in lines_today if l.order
     )
     weight_done = sum(
-        float(l.order.weight_total)
-        for l in lines_today
-        if l.order and l.order.weight_total
-        and l.order.status in [
+        _ew(l.order) for l in lines_today
+        if l.order and l.order.status in [
             models.DOStatus.delivered_success,
-            models.DOStatus.delivered_partial
+            models.DOStatus.delivered_partial,
+            models.DOStatus.delivered_pod_uploaded,
         ]
     )
 

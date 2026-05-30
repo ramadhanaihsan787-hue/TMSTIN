@@ -52,6 +52,8 @@ export default function PreviewZoneModal({
 }: PreviewZoneModalProps) {
     const [hoverInfo, setHoverInfo] = useState<any>(null);
     const [showAllLabels, setShowAllLabels] = useState(false);
+    const [geoCache, setGeoCache]               = useState<Record<string, string>>({});
+    const [geoLoading, setGeoLoading]           = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -92,6 +94,29 @@ export default function PreviewZoneModal({
             };
         }) || [];
     }, [zoningData, truckColors]);
+
+    // ── Reverse geocode via Mapbox (lazy, di-cache per koordinat) ──────────
+    const reverseGeocode = async (lat: number, lon: number): Promise<string | null> => {
+        const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        if (geoCache[key]) return geoCache[key];
+        const token = (import.meta as any).env?.VITE_MAPBOX_TOKEN;
+        if (!token) return null;
+        setGeoLoading(key);
+        try {
+            const res = await fetch(
+                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lon},${lat}.json` +
+                `?access_token=${token}&language=id&limit=1&types=address,neighborhood`
+            );
+            const data = await res.json();
+            const place = data.features?.[0]?.place_name;
+            if (place) {
+                const short = place.split(',').slice(0, 2).join(',').trim();
+                setGeoCache(prev => ({ ...prev, [key]: short }));
+                return short;
+            }
+        } catch { /* silent */ } finally { setGeoLoading(null); }
+        return null;
+    };
 
     return (
         <div className="fixed inset-0 z-[999999] bg-slate-900/90 backdrop-blur-sm flex flex-col p-4 md:p-8">
@@ -307,7 +332,16 @@ export default function PreviewZoneModal({
                             return zone.stores?.map((store: any, j: number) => (
                                 <Marker key={`z${i}-s${j}`} longitude={store.lon || store.lng} latitude={store.lat} anchor="center">
                                     <div className="relative group/pin cursor-pointer flex items-center justify-center" 
-                                         onClick={(e) => { e.stopPropagation(); setHoverInfo({ ...store, color }); }}>
+                                         onClick={async (e) => {
+                                                e.stopPropagation();
+                                                const info = { ...store, color };
+                                                setHoverInfo(info);
+                                                // Lazy reverse geocode kalau alamat dari backend kosong
+                                                if (!store.address && !store.alamat && store.lat && store.lon) {
+                                                    const addr = await reverseGeocode(store.lat, store.lon);
+                                                    if (addr) setHoverInfo((prev: any) => prev ? { ...prev, _geocoded: addr } : prev);
+                                                }
+                                            }}>
                                         {/* Glow effect */}
                                         <div className="absolute -inset-2 rounded-full opacity-0 group-hover/pin:opacity-40 transition-opacity blur-[4px]" style={{ backgroundColor: color }}></div>
                                         {/* Pin */}
@@ -316,11 +350,21 @@ export default function PreviewZoneModal({
                                         
                                         {/* Show All Labels Text (Bigger Mini-Card) */}
                                         {showAllLabels && (
-                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-[#161616]/95 backdrop-blur-sm border border-white/10 p-2.5 rounded-lg shadow-xl z-20 pointer-events-none w-[170px]">
-                                                <h3 className="font-bold text-[11px] text-white uppercase truncate mb-1" style={{ borderLeft: `3px solid ${color}`, paddingLeft: '6px' }}>{store.store_name}</h3>
+                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-[#161616]/95 backdrop-blur-sm border border-white/10 p-2.5 rounded-lg shadow-xl z-20 pointer-events-none w-[185px]">
+                                                <h3 className="font-bold text-[11px] text-white uppercase truncate mb-1" style={{ borderLeft: `3px solid ${color}`, paddingLeft: '6px' }}>
+                                                    {store.store_name || store.nama_toko || store.kode_customer}
+                                                </h3>
                                                 <div className="flex items-center justify-between pl-[9px]">
-                                                    <span className="text-[9px] font-mono text-slate-400">{store.kode_customer || store.kode || store.store_code || '-'}</span>
-                                                    {store.volume > 0 && <span className="text-[10px] font-black text-white bg-white/10 px-1.5 py-0.5 rounded">{store.volume} KG</span>}
+                                                    {(store.address || store.district) && (
+                                                        <span className="text-[9px] text-slate-400 truncate max-w-[120px]">
+                                                            {store.district || store.city || ''}
+                                                        </span>
+                                                    )}
+                                                    {(store.volume || store.weight) > 0 && (
+                                                        <span className="text-[10px] font-black text-white bg-white/10 px-1.5 py-0.5 rounded ml-auto">
+                                                            {store.volume || store.weight} KG
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -378,13 +422,37 @@ export default function PreviewZoneModal({
                                         <div className="w-3.5 h-3.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)] border border-white/50 shrink-0" style={{ backgroundColor: hoverInfo.color }}></div>
                                         <div className="min-w-0">
                                             <h3 className="font-black text-[12px] text-white uppercase tracking-wide truncate">{hoverInfo.store_name || hoverInfo.nama_toko}</h3>
-                                            <p className="text-[9px] font-mono text-slate-400">{hoverInfo.kode_customer || hoverInfo.kode || hoverInfo.store_code || hoverInfo.order_id || '-'}</p>
+                                            <p className="text-[9px] text-slate-400">
+                                                {hoverInfo.district
+                                                    ? `📍 ${hoverInfo.district}${hoverInfo.city ? ', ' + hoverInfo.city : ''}`
+                                                    : <span className="font-mono">{hoverInfo.kode_customer || hoverInfo.kode || '-'}</span>
+                                                }
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <p className="text-[10px] text-slate-300 flex items-start gap-1.5 leading-tight">
                                             <span className="material-symbols-outlined text-[12px] text-primary shrink-0">location_on</span>
-                                            <span className="line-clamp-2" title={hoverInfo.alamat || hoverInfo.address}>{hoverInfo.alamat || hoverInfo.address || `${hoverInfo.kode_customer || hoverInfo.kode || ''} · ${hoverInfo.zoneName || ''}`}</span>
+                                            {(() => {
+                                                const addr = hoverInfo.address || hoverInfo.alamat || (hoverInfo as any)._geocoded;
+                                                const key  = `${Number(hoverInfo.lat).toFixed(4)},${Number(hoverInfo.lon).toFixed(4)}`;
+                                                const isLoading = geoLoading === key;
+                                                return (
+                                                    <span className="line-clamp-2" title={addr || ''}>
+                                                        {isLoading
+                                                            ? <span className="text-slate-500 italic">Memuat alamat...</span>
+                                                            : addr
+                                                                ? addr
+                                                                : <span className="text-slate-600 italic">
+                                                                    {hoverInfo.district
+                                                                        ? `${hoverInfo.district}${hoverInfo.city ? ', ' + hoverInfo.city : ''}`
+                                                                        : `${Number(hoverInfo.lat).toFixed(5)}, ${Number(hoverInfo.lon).toFixed(5)}`
+                                                                    }
+                                                                  </span>
+                                                        }
+                                                    </span>
+                                                );
+                                            })()}
                                         </p>
                                         <div className="flex items-center justify-between pt-1 border-t border-white/5 mt-2">
                                             <p className="text-[10px] text-slate-400 flex items-center gap-1.5">

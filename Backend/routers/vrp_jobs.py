@@ -422,13 +422,25 @@ def trigger_spatial_preview(preview: bool = True):
 
             store_name = order.customer.store_name if order.customer else "Toko"
             kode       = order.customer.kode_customer if order.customer else None
+            # Ambil data alamat dari MasterCustomer kalau ada
+            cust = order.customer
+            address_parts = [
+                cust.address  if cust and cust.address  else None,
+                cust.district if cust and cust.district else None,
+                cust.city     if cust and cust.city     else None,
+            ]
+            full_address = ", ".join(p for p in address_parts if p) or None
+
             locations_input.append({
-                "lat":      lat_f,
-                "lon":      lon_f,
-                "nama_toko": store_name,
+                "lat":          lat_f,
+                "lon":          lon_f,
+                "nama_toko":    store_name,
                 "kode_customer": kode,
-                "order_id": order.order_id,
-                "weight":   float(order.weight_total or 0),
+                "order_id":     order.order_id,
+                "weight":       float(order.weight_total or 0),
+                "address":      full_address,               # dari MasterCustomer
+                "district":     cust.district if cust else None,
+                "city":         cust.city     if cust else None,
             })
 
         if not locations_input:

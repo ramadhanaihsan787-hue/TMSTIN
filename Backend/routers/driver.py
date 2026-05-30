@@ -204,7 +204,15 @@ def get_my_route(
             "customerName": str(nama_toko),
             "address": str(alamat_toko),
             "timeWindow": f"{line.est_arrival.strftime('%H:%M')} WIB" if line.est_arrival else "-",
-            "weight": f"{order.weight_total} KG",
+            # Tampilkan realisasi gudang jika ada, fallback ke routing qty
+            "weight": (
+                f"{order.weight_realisasi:.0f} KG ✓"
+                if order.weight_realisasi and float(order.weight_realisasi) > 0
+                else f"{order.weight_total} KG"
+            ),
+            "weight_realisasi": float(order.weight_realisasi) if order.weight_realisasi else None,
+            "weight_routing":   float(order.weight_total or 0),
+            "has_realisasi":    bool(order.weight_realisasi and float(order.weight_realisasi) > 0),
             "status": status_fe,
             "latitude": float(order.latitude) if order.latitude else 0.0,
             "longitude": float(order.longitude) if order.longitude else 0.0
@@ -269,7 +277,12 @@ async def submit_epod(
         if not line:
             raise HTTPException(status_code=404, detail="Data rute tidak ditemukan!")
 
-        total_order_kg = line.order.weight_total or 0.0
+        # effective weight untuk kalkulasi total muatan truk
+        total_order_kg = (
+            float(line.order.weight_realisasi)
+            if line.order.weight_realisasi and float(line.order.weight_realisasi) > 0
+            else float(line.order.weight_total or 0.0)
+        )
         is_return = has_return.lower() == 'true'
 
         qty_delivered = total_order_kg

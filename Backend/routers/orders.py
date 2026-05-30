@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 
+import openpyxl
 import models
 import schemas
 from dependencies import get_db, get_settings, get_current_user, require_role
@@ -244,6 +245,136 @@ def reject_pod(
 # =======================================================
 # READ-ONLY ENDPOINTS
 # =======================================================
+@router.post("/orders/upload-realisasi")
+@limiter.limit("20/hour")
+async def upload_realisasi(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin_distribusi", "manager_logistik"))
+):
+    """
+    Upload Excel realisasi (jam ~1 malam) untuk update qty final dari gudang.
+    Membaca kolom KODE CUST. + REALISASI dari Excel yang sama dengan routing.
+    TIDAK re-route — hanya update weight_realisasi di delivery_orders.
+    Fallback: jika tidak diupload, sistem tetap pakai weight_total (routing qty).
+    """
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File terlalu besar! Maksimal 10 MB.")
+
+    try:
+        from io import BytesIO
+        import re as _re
+
+        wb = openpyxl.load_workbook(BytesIO(contents), data_only=True)
+        ws = wb.active
+
+        # ── Deteksi header ────────────────────────────────────────────────
+        def normalize(v):
+            return _re.sub(r"[^A-Z0-9]", " ", str(v or "").upper()).strip()
+
+        header_map = {}
+        data_start_row = None
+        for row in ws.iter_rows(min_row=1, max_row=10):
+            for cell in row:
+                key = normalize(cell.value)
+                if "KODE CUST" in key:
+                    header_map["kode_customer"] = cell.column - 1
+                    data_start_row = max(data_start_row or 0, cell.row + 1)
+                if key in ("REALISASI", "QTY REALISASI", "REAL QTY"):
+                    header_map["realisasi"] = cell.column - 1
+                    data_start_row = max(data_start_row or 0, cell.row + 1)
+
+        if "kode_customer" not in header_map:
+            raise HTTPException(status_code=400,
+                detail="Kolom 'KODE CUST.' tidak ditemukan. Pastikan format Excel sama dengan saat routing.")
+        if "realisasi" not in header_map:
+            raise HTTPException(status_code=400,
+                detail="Kolom 'REALISASI' tidak ditemukan. Pastikan admin gudang sudah mengisi kolom REALISASI.")
+
+        # ── Proses setiap baris ───────────────────────────────────────────
+        import datetime as _dt
+        today = _dt.date.today()
+
+        updated, skipped_empty, not_found = [], [], []
+
+        for row in ws.iter_rows(min_row=data_start_row, values_only=True):
+            row_list = list(row)
+            kode_raw  = row_list[header_map["kode_customer"]] if len(row_list) > header_map["kode_customer"] else None
+            real_raw  = row_list[header_map["realisasi"]]      if len(row_list) > header_map["realisasi"]      else None
+
+            if not kode_raw:
+                continue
+
+            kode = str(kode_raw).strip()
+
+            # Skip baris dengan REALISASI kosong atau 0
+            try:
+                real_qty = float(str(real_raw).replace(",", ".")) if real_raw is not None else None
+            except (ValueError, TypeError):
+                real_qty = None
+
+            if real_qty is None or real_qty == 0:
+                skipped_empty.append(kode)
+                continue
+
+            # Cari DeliveryOrder untuk toko ini hari ini (routing sore hari)
+            order = db.query(models.DeliveryOrder).join(
+                models.MasterCustomer,
+                models.DeliveryOrder.store_id == models.MasterCustomer.store_id,
+                isouter=True
+            ).filter(
+                models.MasterCustomer.kode_customer == kode,
+                models.DeliveryOrder.status.in_([
+                    models.DOStatus.do_assigned_to_route,
+                    models.DOStatus.delivered_pod_uploaded,
+                    models.DOStatus.so_waiting_verification,
+                    models.DOStatus.do_verified,
+                ])
+            ).order_by(models.DeliveryOrder.created_at.desc()).first()
+
+            if not order:
+                not_found.append(kode)
+                continue
+
+            # Update qty realisasi — HANYA ini, tidak menyentuh routing
+            old_qty = order.weight_realisasi or order.weight_total
+            order.weight_realisasi = real_qty
+            updated.append({
+                "kode_customer": kode,
+                "order_id":      order.order_id,
+                "qty_routing":   order.weight_total,
+                "qty_realisasi": real_qty,
+                "selisih_kg":    round(real_qty - (order.weight_total or 0), 1),
+            })
+
+        db.commit()
+
+        total_selisih = sum(u["selisih_kg"] for u in updated)
+
+        return {
+            "status":        "success",
+            "message":       f"✅ {len(updated)} order berhasil diupdate realisasinya.",
+            "updated_count": len(updated),
+            "updated":       updated,
+            "skipped_empty": skipped_empty,
+            "not_found":     not_found,
+            "summary": {
+                "total_selisih_kg": round(total_selisih, 1),
+                "note": "Negatif = realisasi lebih kecil dari routing (normal). Positif = lebih besar.",
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"🚨 [UPLOAD REALISASI] Gagal: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500,
+            detail=f"Gagal memproses file realisasi: {str(e)}")
+
+
 @router.get("/orders", response_model=schemas.PendingOrderResponse)
 def get_pending_orders(status: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     query = db.query(models.DeliveryOrder).options(

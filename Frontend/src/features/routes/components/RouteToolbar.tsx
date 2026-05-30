@@ -8,10 +8,12 @@ interface RouteToolbarProps {
     onDateChange: (date: string) => void;
     isUploading: boolean;
     onFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
-    hasRoutes?: boolean; // Penanda kalau hari itu ada rute hasil VRP atau kosong
+    hasRoutes?: boolean;          // Ada rute aktif hari ini → tampilkan tombol Realisasi
+    onUploadRealisasi?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    isUploadingRealisasi?: boolean;
 }
 
-export default function RouteToolbar({ selectedDate, onDateChange, isUploading, onFileUpload, hasRoutes }: RouteToolbarProps) {
+export default function RouteToolbar({ selectedDate, onDateChange, isUploading, onFileUpload, hasRoutes, onUploadRealisasi, isUploadingRealisasi }: RouteToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isExporting, setIsExporting] = useState(false);
 
@@ -65,6 +67,23 @@ export default function RouteToolbar({ selectedDate, onDateChange, isUploading, 
                     <span className="material-symbols-outlined text-lg">print</span> 
                     {isExporting ? 'Generating Excel...' : 'Cetak Surat Jalan'}
                 </button>
+
+                {/* Tombol Upload Realisasi — muncul hanya kalau sudah ada rute hari ini */}
+                {hasRoutes && onUploadRealisasi && (
+                    <label className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 cursor-pointer transition-all border
+                        ${isUploadingRealisasi
+                            ? 'bg-teal-500/10 text-teal-400 border-teal-500/30 cursor-wait'
+                            : 'bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border-teal-500/30 hover:border-teal-400'
+                        }`}
+                        title="Upload Excel yang sama dengan routing — sistem baca kolom REALISASI">
+                        <span className="material-symbols-outlined text-[16px]">
+                            {isUploadingRealisasi ? 'sync' : 'update'}
+                        </span>
+                        {isUploadingRealisasi ? 'Proses...' : 'Realisasi'}
+                        <input type="file" className="hidden" accept=".xlsx,.xls,.csv"
+                            onChange={onUploadRealisasi} disabled={isUploadingRealisasi} />
+                    </label>
+                )}
 
                 <button type="button" onClick={handleUploadClick} disabled={isUploading} className="px-5 py-2.5 bg-primary text-white font-bold rounded-lg hover:brightness-110 transition-all text-sm flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95">
                     <span className="material-symbols-outlined text-lg">upload_file</span> Upload SAP Excel

@@ -126,7 +126,9 @@ class DeliveryOrder(Base):
     
     latitude = Column(Numeric(10, 8), nullable=True)
     longitude = Column(Numeric(11, 8), nullable=True)
-    weight_total = Column(Float)
+    weight_total      = Column(Float)
+    weight_realisasi  = Column(Float, nullable=True)   # Qty final dari gudang (upload jam 1 malam)
+                                                       # NULL = belum diupdate, pakai weight_total
     
     delivery_window_start = Column(Integer, default=360)
     delivery_window_end = Column(Integer, default=1200)
